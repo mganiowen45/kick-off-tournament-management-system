@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bracket - KICKOFF</title>
+<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="assets/css/page-overrides.css">
+<script src="assets/js/kickoff-ui.js"></script>
+<script src="includes/nav.js" data-page="bracket" data-layout="adaptive"></script>
+</head>
+<body>
+<div id="page-main">
+  <div style="position:relative;z-index:1;" id="page-body">
+    <div class="state-msg">Loading bracket...</div>
+  </div>
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const tid = params.get("id");
+const inviteToken = params.get("invite") || "";
+if (!tid) location.href = "tournaments.html";
+let currentUser = null;
+const esc = value => KickoffUI.escapeHtml(value);
+
+async function safeFetch(url, timeout) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeout || 8000);
+  try {
+    const response = await fetch(url, { signal: ctrl.signal, credentials: "same-origin" });
+    const text = await response.text();
+    if (text.trimStart().startsWith("<")) throw new Error(`API returned HTML instead of JSON for ${url}.`);
+    return JSON.parse(text);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function roundLabel(roundNum, allRoundNums) {
+  const fromEnd = allRoundNums.length - 1 - allRoundNums.indexOf(roundNum);
+  if (fromEnd === 0) return "Final";
+  if (fromEnd === 1) return "Semifinal";
+  if (fromEnd === 2) return "Quarterfinal";
+  return `Round ${roundNum}`;
+}
+
+function slotPlayer(slot) {
+  if (!slot || !slot.user_id) return { name: slot && Number(slot.is_bye) === 1 ? "BYE" : "TBD", avatar: "assets/avatars/neutral-orbit.svg", id: 0 };
+  return { name: slot.username || "Player", avatar: slot.avatar_url || "assets/avatars/neutral-orbit.svg", id: Number(slot.user_id) };
+}
+
+function matchFor(roundMatches, position) {
+  return (roundMatches || []).find(m => Number(m.bracket_position || m.match_number) === Number(position)) || null;
+}
+
+function buildBracket(rounds, slotsByRound, roundNums) {
+  let html = "";
+  roundNums.forEach((rn, colIdx) => {
+    const positions = slotsByRound[rn] || {};
+    const roundMatches = rounds[rn] || [];
+    const hasSlots = Object.keys(positions).length > 0;
+    const orderedPositions = hasSlots
+      ? Object.keys(positions).map(Number).sort((a, b) => a - b)
+      : roundMatches.map((m, index) => index + 1);
+    html += `<div class="b-round" data-round="${rn}"><div class="round-label">${roundLabel(rn, roundNums)}</div>`;
+    orderedPositions.forEach(position => {
+      const pair = positions[position] || [];
+      const m = hasSlots ? matchFor(roundMatches, position) : (roundMatches[position - 1] || null);
+      const done = m && m.status === "confirmed";
+      const players = pair.length
+        ? [slotPlayer(pair[0]), slotPlayer(pair[1])]
+        : [
+            { name: m && m.player1_name ? m.player1_name : "TBD", avatar: m && m.player1_avatar_url ? m.player1_avatar_url : "assets/avatars/neutral-orbit.svg", id: m ? Number(m.player1_id || 0) : 0 },
+            { name: m && m.player2_name ? m.player2_name : "TBD", avatar: m && m.player2_avatar_url ? m.player2_avatar_url : "assets/avatars/neutral-orbit.svg", id: m ? Number(m.player2_id || 0) : 0 }
+          ];
+      html += `<div class="b-match ${done ? "" : "pending"}" data-match-id="${m ? Number(m.id) : ""}">
+        ${players.map((p, idx) => {
+          const winner = done && Number(m.winner_id) === p.id;
+          const me = currentUser && p.id === Number(currentUser.id);
+          const score = m ? (idx === 0 ? m.player1_score : m.player2_score) : null;
+          return `<div class="b-team ${winner ? "winner" : done ? "loser" : ""} ${me ? "me" : ""}">
+            <img class="match-avatar" src="${esc(p.avatar)}" alt="">
+            <span class="b-name">${esc(p.name)}</span>
+            <span class="b-score">${score !== null && score !== undefined ? Number(score) : "-"}</span>
+          </div>`;
+        }).join("")}
+      </div>`;
+    });
+    html += "</div>";
+    if (colIdx < roundNums.length - 1) html += `<div class="connector-col" data-from="${rn}"><svg></svg></div>`;
+  });
+
+  const finalMatches = rounds[roundNums[roundNums.length - 1]] || [];
+  const final = finalMatches[0];
+  const champion = final && final.winner_name ? final.winner_name : "";
+  html += `<div class="champion-col">
+    <div class="round-label" style="width:100%;text-align:center;border:none;margin-bottom:1rem;">Champion</div>
+    <div class="champion-box">
+      <div class="champ-lbl">${champion ? "Tournament Winner" : "To Be Crowned"}</div>
+      <div class="champ-name">${esc(champion || "TBD")}</div>
+    </div>
+  </div>`;
+  return html;
+}
+
+function drawConnectors() {
+  const wrapEl = document.querySelector(".bracket");
+  if (!wrapEl) return;
+  wrapEl.querySelectorAll(".connector-col").forEach(col => {
+    const fromRound = parseInt(col.dataset.from, 10);
+    const toRound = col.nextElementSibling;
+    const fromEl = wrapEl.querySelector(`.b-round[data-round="${fromRound}"]`);
+    if (!fromEl || !toRound) return;
+    const fromMatches = Array.from(fromEl.querySelectorAll(".b-match"));
+    const toMatches = Array.from(toRound.querySelectorAll(".b-match"));
+    const svgEl = col.querySelector("svg");
+    svgEl.innerHTML = "";
+    svgEl.setAttribute("width", col.offsetWidth);
+    svgEl.setAttribute("height", col.offsetHeight);
+    toMatches.forEach((mC, i) => {
+      const mA = fromMatches[i * 2];
+      const mB = fromMatches[i * 2 + 1];
+      if (!mA) return;
+      const colTop = col.getBoundingClientRect().top;
+      const midA = mA.getBoundingClientRect().top + mA.offsetHeight / 2 - colTop;
+      const midB = mB ? mB.getBoundingClientRect().top + mB.offsetHeight / 2 - colTop : midA;
+      const midC = mC.getBoundingClientRect().top + mC.offsetHeight / 2 - colTop;
+      const midY = (midA + midB) / 2;
+      const xMid = col.offsetWidth / 2;
+      svgEl.innerHTML += `<path d="M0,${midA} H${xMid} V${midY}" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>`;
+      if (mB) svgEl.innerHTML += `<path d="M0,${midB} H${xMid} V${midY}" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>`;
+      svgEl.innerHTML += `<path d="M${xMid},${midY} H${col.offsetWidth},${midC}" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>`;
+    });
+  });
+}
+
+async function loadStandings() {
+  const el = document.getElementById("league-view");
+  el.innerHTML = `<div class="state-msg">Loading standings...</div>`;
+  try {
+    const inviteQuery = inviteToken ? `&invite=${encodeURIComponent(inviteToken)}` : "";
+    const data = await safeFetch(`api/tournaments/standings.php?id=${tid}${inviteQuery}`);
+    const groups = data.groups || [{ name: "Standings", standings: data.standings || [] }];
+    if (!groups.some(g => g.standings && g.standings.length)) {
+      el.innerHTML = `<div class="state-msg">No standings data yet.</div>`;
+      return;
+    }
+    el.innerHTML = groups.map(group => `<div class="league-view-wrap">
+      <div class="round-label" style="text-align:left;">${esc(group.name || "Standings")}</div>
+      <table class="league-table">
+        <thead><tr><th>#</th><th>Player</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr></thead>
+        <tbody>${(group.standings || []).map(s => `<tr class="${currentUser && Number(s.user_id) === Number(currentUser.id) ? "me" : ""}">
+          <td>${Number(s.position || 0)}</td><td>${esc(s.username)}</td>
+          <td>${Number(s.wins || 0) + Number(s.draws || 0) + Number(s.losses || 0)}</td>
+          <td>${Number(s.wins || 0)}</td><td>${Number(s.draws || 0)}</td><td>${Number(s.losses || 0)}</td>
+          <td>${Number(s.goals_for || 0)}</td><td>${Number(s.goals_against || 0)}</td><td>${Number(s.goal_diff || 0)}</td>
+          <td class="pts-cell">${Number(s.league_points || 0)}</td>
+        </tr>`).join("")}</tbody>
+      </table>
+    </div>`).join("");
+  } catch (error) {
+    el.innerHTML = `<div class="state-msg"><h3>Couldn't load standings</h3><p>${esc(error.message)}</p></div>`;
+  }
+}
+
+function showView(btn, view) {
+  document.querySelectorAll(".tt-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  document.getElementById("ko-view").style.display = view === "bracket" ? "block" : "none";
+  document.getElementById("league-view").style.display = view === "league" ? "block" : "none";
+  if (view === "league") loadStandings();
+}
+
+async function load() {
+  try {
+    try {
+      const sData = await safeFetch("api/users/session.php");
+      if (sData.logged_in) currentUser = sData.user;
+    } catch (error) {}
+    const inviteQuery = inviteToken ? `&invite=${encodeURIComponent(inviteToken)}` : "";
+    const data = await safeFetch(`api/tournaments/bracket.php?id=${tid}${inviteQuery}`);
+    if (!data.success) throw new Error(data.error || "Tournament not found.");
+    const t = data.tournament;
+    const rounds = data.rounds || {};
+    const slots = (data.slots && (data.slots.knockout || data.slots.series)) || {};
+    const roundNums = Object.keys(slots).length
+      ? Object.keys(slots).map(Number).sort((a, b) => a - b)
+      : Object.keys(rounds).map(Number).sort((a, b) => a - b);
+    const statusClass = t.status === "active" ? "badge-live" : t.status === "open" ? "badge-open" : "badge-soon";
+    const bracketContent = roundNums.length
+      ? `<div class="scroll-hint">Swipe horizontally to see the full bracket</div><div class="bracket-wrap"><div class="bracket">${buildBracket(rounds, slots, roundNums)}</div></div>`
+      : `<div class="state-msg"><h3>No bracket yet</h3>The bracket will appear once the tournament starts.</div>`;
+
+    document.title = `Bracket - ${t.name} - KICKOFF`;
+    document.getElementById("page-body").innerHTML = `
+      <div class="bracket-header">
+        <div>
+          <div class="bh-title">${esc(t.name)}</div>
+          <div class="bh-badges"><span class="badge ${statusClass}">${esc(t.status)}</span><span class="badge badge-ko">${esc(t.format_label || t.format)}</span></div>
+        </div>
+        <div class="bh-meta">
+          <div class="bh-m"><strong>${Number(t.current_round || 1)}</strong>Round</div>
+          <div class="bh-m"><strong>${Number(t.current_players || 0)}</strong>Players</div>
+          <div class="bh-m"><strong>${esc(t.prize_pool || "TZS 0")}</strong>Prize</div>
+          <div class="tab-toggle">
+            <button class="tt-btn active" onclick="showView(this,'bracket')">Bracket</button>
+            <button class="tt-btn" onclick="showView(this,'league')">Group Standings</button>
+          </div>
+        </div>
+      </div>
+      <div id="ko-view">${bracketContent}</div>
+      <div id="league-view" style="display:none;"></div>`;
+    if (roundNums.length) requestAnimationFrame(() => requestAnimationFrame(drawConnectors));
+    window.addEventListener("resize", drawConnectors);
+  } catch (error) {
+    document.getElementById("page-body").innerHTML = `<div class="state-msg"><h3>Failed to load bracket</h3><p>${esc(error.message)}</p><p style="margin-top:1rem;"><a href="tournaments.html">Back to tournaments</a></p></div>`;
+  }
+}
+
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+<?php require_once __DIR__ . '/includes/page_guard.php'; requirePlayerPage(); ?>
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Notifications — KICKOFF</title><link rel="stylesheet" href="shared.css"><link rel="stylesheet" href="assets/css/page-overrides.css">
+<script src="assets/js/kickoff-ui.js"></script><script src="includes/nav.js" data-page="notifications" data-layout="app"></script></head>
+<body><div id="page-main"><div class="sec-tag">Updates</div><div class="notification-heading"><h1 class="sec-title">Your <em>Notifications</em></h1><button class="btn-ghost" id="mark-all">Mark All Read</button></div><div id="notification-list"><div class="state-msg">Loading notifications…</div></div></div>
+<script>
+"use strict";
+const esc=KickoffUI.escapeHtml;
+async function loadNotifications(){
+  try{const response=await fetch('api/notifications/list.php');const data=await response.json();if(!data.success)throw new Error(data.error||'Could not load notifications.');
+    const list=document.getElementById('notification-list');
+    list.innerHTML=data.notifications.length?data.notifications.map(n=>`<a class="notification-card ${Number(n.is_read)?'':'unread'}" href="${esc(n.link_url||'#')}" data-id="${Number(n.id)}">
+      ${n.actor_avatar_url?`<img class="user-avatar" src="${esc(n.actor_avatar_url)}" alt="${esc(n.actor_username||'Player')} avatar">`:'<div class="notification-system">K</div>'}
+      <div class="notification-copy"><strong>${esc(n.title)}</strong><p>${esc(n.body)}</p><small>${new Date(n.created_at).toLocaleString()}</small></div>${Number(n.is_read)?'':'<span class="live-dot"></span>'}</a>`).join(''):'<div class="empty-state"><p>You are all caught up.</p></div>';
+    list.querySelectorAll('[data-id]').forEach(item=>item.addEventListener('click',()=>markRead(item.dataset.id)));
+  }catch(error){document.getElementById('notification-list').innerHTML='<div class="state-msg"><h3>Notifications unavailable</h3><p>'+esc(error.message)+'</p></div>'}
+}
+async function markRead(id){try{await KickoffUI.apiFetch('api/notifications/mark_read.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:Number(id)})})}catch(error){}}
+document.getElementById('mark-all').addEventListener('click',async()=>{const response=await KickoffUI.apiFetch('api/notifications/mark_read.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:'all'})});const data=await response.json();if(data.success)loadNotifications()});
+loadNotifications();
+</script></body></html>

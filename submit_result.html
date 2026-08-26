@@ -1,0 +1,200 @@
+<?php require_once __DIR__ . '/includes/page_guard.php'; requirePlayerPage(); ?>
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Submit Result — KICKOFF</title>
+<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="assets/css/page-overrides.css">
+
+<script src="assets/js/kickoff-ui.js"></script>
+<script src="includes/nav.js" data-page="submit_result" data-layout="app"></script>
+</head>
+<body>
+<div id="page-main">
+<div style="position:relative;z-index:1;">
+  <div class="submit-layout">
+    <div class="sec-tag">Match Verification</div>
+    <h1 class="sec-title">Submit <em>Result</em></h1>
+    <div class="alert-error" id="submit-error"></div>
+    <div class="match-banner" id="match-banner">
+      <div>
+        <div class="mb-info" style="margin-bottom:4px;" id="match-tournament">Select a match below</div>
+        <div class="mb-match">
+          <span class="mb-name me" id="match-me">You</span>
+          <span class="mb-vs">VS</span>
+          <span class="mb-name" id="match-opp">Opponent</span>
+        </div>
+      </div>
+      <div class="mb-info" id="match-time"></div>
+    </div>
+    <div class="info-box">
+      <p><strong>How this works:</strong> Enter the final score, select your result (Win/Loss/Draw), and upload a screenshot. If both players submit matching results, the outcome is <strong>automatically confirmed</strong>. Conflicting submissions go to Admin for review.</p>
+    </div>
+    <div id="submit-form" data-error-target="submit-error">
+      <div class="form-group" style="margin-bottom:1.5rem;">
+        <label class="form-label">Select Match</label>
+        <select class="form-select form-input" id="sel-match" onchange="onMatchSelect(this)">
+          <option value="">Loading your matches...</option>
+        </select>
+      </div>
+      <div class="card" style="margin-bottom:1.5rem;">
+        <div class="card-title">Final Score</div>
+        <div class="score-row">
+          <div class="score-player">
+            <div class="score-player-name" id="score-me-label">You</div>
+            <input type="number" class="score-input" id="my-score" min="0" max="99" value="0" oninput="updateResult()">
+          </div>
+          <div class="score-sep">–</div>
+          <div class="score-player">
+            <div class="score-player-name" id="score-opp-label">Opponent</div>
+            <input type="number" class="score-input" id="opp-score" min="0" max="99" value="0" oninput="updateResult()">
+          </div>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:1.5rem;">
+        <label class="form-label">Your Result</label>
+        <div class="result-choice">
+          <div class="rc-btn" id="btn-win" onclick="selectResult('win')"><div class="rc-icon"><i class="fa-solid fa-trophy"></i></div><div class="rc-lbl" style="color:var(--lime);">Win</div></div>
+          <div class="rc-btn" id="btn-draw" onclick="selectResult('draw')"><div class="rc-icon"><i class="fa-solid fa-scale-balanced"></i></div><div class="rc-lbl" style="color:var(--cyan);">Draw</div></div>
+          <div class="rc-btn" id="btn-loss" onclick="selectResult('loss')"><div class="rc-icon"><i class="fa-solid fa-xmark"></i></div><div class="rc-lbl" style="color:var(--fire);">Loss</div></div>
+        </div>
+        <input type="hidden" id="result-value" value="">
+      </div>
+      <div class="form-group" style="margin-bottom:1.5rem;">
+        <label class="form-label">Screenshot Proof</label>
+        <div class="upload-zone" id="upload-zone" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="handleDrop(event)">
+          <input type="file" id="screenshot-file" accept="image/*" onchange="previewFile(this)">
+          <span class="upload-icon"><i class="fa-solid fa-camera"></i></span>
+          <div class="upload-title">Upload Match Screenshot</div>
+          <div class="upload-sub">Drag &amp; drop or click. PNG, JPG up to 10MB.</div>
+          <img class="preview-img" id="preview-img" alt="Preview">
+        </div>
+        <div class="form-hint">Screenshot must clearly show both player names and the final scoreline.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Additional Notes (optional)</label>
+        <textarea class="form-textarea form-input" id="notes" placeholder="Any comments about the match..."></textarea>
+      </div>
+      <button class="btn-lime btn-full" onclick="submitResult()" style="margin-top:1rem;" id="submit-btn">Submit Result</button>
+    </div>
+    <div class="success-screen" id="success-screen">
+      <span class="success-icon"><i class="fa-solid fa-circle-check"></i></span>
+      <div class="success-title" id="success-title">Result Submitted!</div>
+      <p class="success-sub" id="success-msg">Your result has been recorded.</p>
+      <div style="display:flex;gap:1rem;justify-content:center;">
+        <a href="tournament_detail.html" class="btn-ghost" id="back-btn">Back to Tournament</a>
+        <a href="dashboard.html" class="btn-lime">Go to Dashboard</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentUser = null;
+let selectedResult = '';
+let currentMatchId = new URLSearchParams(location.search).get('match_id');
+let matchesData = [];
+
+async function init() {
+  const sRes = await fetch('api/users/session.php');
+  const sData = await sRes.json();
+  if (!sData.logged_in) { window.location.href = 'login.html'; return; }
+  currentUser = sData.user;
+
+  // Load dashboard to get pending matches
+  const dRes  = await fetch('api/users/dashboard.php');
+  const dData = await dRes.json();
+  matchesData = dData.upcomingMatches || [];
+
+  const sel = document.getElementById('sel-match');
+  if (matchesData.length) {
+    sel.innerHTML = '<option value="">Select a match...</option>' +
+      matchesData.map(m => `<option value="${m.id}" data-opp="${m.opponent_username}" data-opp-id="${m.opponent_id}" data-tour="${m.tournament_name}" data-time="${m.scheduled_at||''}">${m.tournament_name} — vs ${m.opponent_username}</option>`).join('');
+    // Auto-select if match_id in URL
+    if (currentMatchId) { sel.value = currentMatchId; onMatchSelect(sel); }
+  } else {
+    sel.innerHTML = '<option>No pending matches found</option>';
+  }
+
+  document.getElementById('score-me-label').textContent = currentUser.username;
+  document.getElementById('match-me').textContent = currentUser.username;
+}
+
+function onMatchSelect(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  currentMatchId = sel.value;
+  if (!sel.value) return;
+  document.getElementById('match-opp').textContent     = opt.dataset.opp;
+  document.getElementById('match-tournament').textContent = opt.dataset.tour;
+  document.getElementById('score-opp-label').textContent  = opt.dataset.opp;
+  document.getElementById('match-time').textContent = opt.dataset.time
+    ? new Date(opt.dataset.time).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})
+    : 'Time TBD';
+  document.getElementById('back-btn').href = `tournament_detail.html`;
+}
+
+function selectResult(r) {
+  ['win','draw','loss'].forEach(x => { document.getElementById('btn-'+x).className = 'rc-btn'; });
+  const cls = { win:'selected-win', draw:'selected-draw', loss:'selected-loss' };
+  document.getElementById('btn-'+r).classList.add(cls[r]);
+  selectedResult = r; document.getElementById('result-value').value = r;
+}
+
+function updateResult() {
+  const my  = parseInt(document.getElementById('my-score').value)  || 0;
+  const opp = parseInt(document.getElementById('opp-score').value) || 0;
+  if (my > opp) selectResult('win');
+  else if (my < opp) selectResult('loss');
+  else selectResult('draw');
+}
+
+function previewFile(input) {
+  if (!input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = e => { const img = document.getElementById('preview-img'); img.src = e.target.result; img.style.display = 'block'; };
+  reader.readAsDataURL(input.files[0]);
+}
+function dragOver(e)  { e.preventDefault(); document.getElementById('upload-zone').classList.add('drag-over'); }
+function dragLeave()  { document.getElementById('upload-zone').classList.remove('drag-over'); }
+function handleDrop(e){ e.preventDefault(); dragLeave(); const f=e.dataTransfer.files[0]; if(f?.type.startsWith('image/')){const dt=new DataTransfer();dt.items.add(f);const inp=document.querySelector('#upload-zone input');inp.files=dt.files;previewFile(inp);} }
+
+async function submitResult() {
+  const form = document.getElementById('submit-form');
+  const btn = document.getElementById('submit-btn');
+  KickoffUI.hideFormError(form, { errorId: 'submit-error' });
+  if (!currentMatchId) { KickoffUI.showFormError(form, 'Please select a match.', { errorId: 'submit-error', field: '#sel-match', title: 'Result needs attention' }); return; }
+  if (!selectedResult) { KickoffUI.showFormError(form, 'Please select your result: Win, Draw, or Loss.', { errorId: 'submit-error', title: 'Result needs attention' }); return; }
+  const file = document.getElementById('screenshot-file').files[0];
+  if (!file) { KickoffUI.showFormError(form, 'Please upload a screenshot.', { errorId: 'submit-error', field: '#screenshot-file', title: 'Result needs attention' }); return; }
+
+  await KickoffUI.withButtonLoading(btn, 'Submitting...', async () => {
+    const fd = new FormData();
+    fd.append('match_id',        currentMatchId);
+    fd.append('my_score',        document.getElementById('my-score').value);
+    fd.append('opponent_score',  document.getElementById('opp-score').value);
+    fd.append('claimed_result',  selectedResult);
+    fd.append('notes',           document.getElementById('notes').value);
+    fd.append('screenshot',      file);
+
+    try {
+      const res  = await fetch('api/results/submit.php', { method:'POST', body: fd, credentials:'same-origin' });
+      const data = await res.json();
+      if (data.success) {
+        document.getElementById('submit-form').style.display = 'none';
+        document.getElementById('success-screen').style.display = 'block';
+        const v = data.verification || {};
+        document.getElementById('success-title').textContent = v.status === 'confirmed' ? 'Result Confirmed!' : 'Result Submitted!';
+        document.getElementById('success-msg').textContent   = v.message || 'Your result has been recorded.';
+      } else {
+        KickoffUI.showFormError(form, data.error || 'Submission failed.', { errorId: 'submit-error', title: 'Result could not be submitted' });
+      }
+    } catch { KickoffUI.showFormError(form, 'Network error. Please try again.', { errorId: 'submit-error', title: 'Result could not be submitted' }); }
+  });
+}
+
+init();
+</script>
+</div>
+</body>
+</html>

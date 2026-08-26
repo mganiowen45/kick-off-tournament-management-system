@@ -1,0 +1,401 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Register — KICKOFF</title>
+<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="assets/css/page-overrides.css">
+
+<script src="assets/js/kickoff-ui.js"></script>
+<script src="includes/nav.js" data-page="register" data-layout="auth"></script>
+
+<style>
+  /* Red border state for invalid fields */
+  .form-input.field-error,
+  .form-select.field-error {
+    border-color: #ff4e00 !important;
+    box-shadow: 0 0 0 2px rgba(255, 78, 0, 0.18) !important;
+  }
+  /* Restore normal focus ring as soon as user fixes the field */
+  .form-input.field-error:focus,
+  .form-select.field-error:focus {
+    border-color: var(--cyan, #00d9f5) !important;
+    box-shadow: 0 0 0 2px rgba(0, 217, 245, 0.18) !important;
+  }
+  .field-error-msg {
+    color: #ff4e00;
+    font-size: .75rem;
+    margin-top: 4px;
+    display: none;
+  }
+  .field-error-msg.visible {
+    display: block;
+  }
+</style>
+</head>
+<body>
+<div id="page-main">
+<div class="auth-glow"></div>
+<div class="auth-page">
+  <div class="auth-box">
+    <div class="auth-header">
+      <a href="index.html" class="auth-logo">KICK<span>OFF</span></a>
+      <h1>Create Your Account</h1>
+      <p>Create your player account, then add game identities in profile setup</p>
+    </div>
+    <div class="auth-card">
+      <div class="alert-error" id="reg-error"></div>
+      <div class="alert-success" id="reg-success"></div>
+      <form id="register-form" data-error-target="reg-error" novalidate>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">First Name</label>
+            <input type="text" class="form-input" name="first_name" id="first_name" placeholder="John">
+            <div class="field-error-msg" id="err-first_name"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Last Name</label>
+            <input type="text" class="form-input" name="last_name" id="last_name" placeholder="Doe">
+            <div class="field-error-msg" id="err-last_name"></div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Username</label>
+          <input type="text" class="form-input" name="username" id="username" placeholder="e.g. GoalMaster_KE" maxlength="30" oninput="debounceCheckUsername(this.value)">
+          <div class="form-hint" id="username-hint">3–30 characters. Letters, numbers and underscores only.</div>
+          <div class="field-error-msg" id="err-username"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email Address</label>
+          <input type="email" class="form-input" name="email" id="email" placeholder="you@example.com">
+          <div class="field-error-msg" id="err-email"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Country</label>
+          <select class="form-select form-input" name="country" id="country">
+            <option value="" disabled selected>Select your country</option>
+            <option>Tanzania</option><option>Kenya</option><option>Uganda</option>
+            <option>Rwanda</option><option>Ethiopia</option><option>Nigeria</option>
+            <option>Ghana</option><option>South Africa</option><option>Other</option>
+          </select>
+          <div class="field-error-msg" id="err-country"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input type="password" class="form-input" name="password" id="password" placeholder="Min. 8 characters" oninput="checkStrength(this.value)">
+          <div class="strength-bar"><div class="strength-fill" id="strength-fill"></div></div>
+          <div class="strength-label" id="strength-label">Enter a password</div>
+          <div class="field-error-msg" id="err-password"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Confirm Password</label>
+          <input type="password" class="form-input" id="confirm-password" placeholder="Re-enter password">
+          <div class="field-error-msg" id="err-confirm_password"></div>
+        </div>
+        <div class="terms-check">
+          <input type="checkbox" id="terms">
+          <label for="terms">I agree to the <a href="#">Terms of Service</a> and <a href="#">Fair Play Rules</a>. I understand that submitting false results may lead to a ban.</label>
+        </div>
+        <div class="field-error-msg" id="err-terms"></div>
+        <button type="submit" class="btn-lime btn-full" id="reg-btn">Create Account</button>
+      </form>
+    </div>
+    <div class="auth-footer">
+      Already have an account? <a href="login.html" id="login-link">Log in here</a>
+    </div>
+  </div>
+</div>
+
+<script>
+const authParams = new URLSearchParams(location.search);
+const pendingReturnTo = authParams.get('return_to') || '';
+function safeReturnTo(value) {
+  const v = String(value || '').trim();
+  if (!v || v.length > 300 || /^[a-z][a-z0-9+.-]*:/i.test(v) || v.includes('//') || v.includes('\\')) return '';
+  if (!/^[A-Za-z0-9_.-]+\.html(?:\?[A-Za-z0-9%_.~=&+-]*)?$/.test(v) || v.startsWith('admin_')) return '';
+  return v;
+}
+function withReturnTo(page) {
+  const safe = safeReturnTo(pendingReturnTo);
+  return safe ? `${page}?return_to=${encodeURIComponent(safe)}` : page;
+}
+document.getElementById('login-link').href = withReturnTo('login.html');
+
+// Redirect if already logged in
+(async () => {
+  const res = await fetch('api/users/session.php').catch(()=>null);
+  if (res?.ok) {
+    const d = await res.json();
+    const returnTo = safeReturnTo(pendingReturnTo);
+    if (d.logged_in) {
+      window.location.href = d.user.role === 'admin'
+        ? 'admin_dashboard.html'
+        : (Number(d.user.profile_setup_completed || 0) === 1 ? (returnTo || 'dashboard.html') : withReturnTo('profile_setup.html'));
+    }
+  }
+})();
+
+// ─── Field error helpers ──────────────────────────────────────────────────────
+
+function setFieldError(fieldId, message) {
+  const input = document.getElementById(fieldId);
+  const msg   = document.getElementById('err-' + fieldId);
+  if (input) {
+    input.classList.add('field-error');
+    // Auto-clear the red border the moment the user starts correcting the field
+    input.addEventListener('input',  () => clearFieldError(fieldId), { once: true });
+    input.addEventListener('change', () => clearFieldError(fieldId), { once: true });
+  }
+  if (msg) {
+    msg.textContent = message;
+    msg.classList.add('visible');
+  }
+}
+
+function clearFieldError(fieldId) {
+  const input = document.getElementById(fieldId);
+  const msg   = document.getElementById('err-' + fieldId);
+  if (input) input.classList.remove('field-error');
+  if (msg)   { msg.textContent = ''; msg.classList.remove('visible'); }
+}
+
+function clearAllFieldErrors() {
+  document.querySelectorAll('.field-error').forEach(el => el.classList.remove('field-error'));
+  document.querySelectorAll('.field-error-msg').forEach(el => { el.textContent = ''; el.classList.remove('visible'); });
+}
+
+// Top banner — for generic / unmapped server errors only
+function showBanner(message) {
+  KickoffUI.showFormError(document.getElementById('register-form'), message, { errorId: 'reg-error', title: 'Registration failed' });
+}
+
+function hideBanner() {
+  KickoffUI.hideFormError(document.getElementById('register-form'), { errorId: 'reg-error' });
+}
+
+// Mark a field invalid AND scroll to it
+function showFieldError(fieldId, message) {
+  KickoffUI.showFormError(document.getElementById('register-form'), message, { errorId: 'reg-error', field: '#' + fieldId, title: 'Registration failed' });
+}
+
+// ─── Client-side validation ───────────────────────────────────────────────────
+
+function validateForm(form) {
+  clearAllFieldErrors();
+  hideBanner();
+  let firstErrorId = null;
+
+  function fail(fieldId, message) {
+    setFieldError(fieldId, message);
+    if (!firstErrorId) firstErrorId = fieldId;
+  }
+
+  const firstName = form.first_name.value.trim();
+  const lastName  = form.last_name.value.trim();
+  const username  = form.username.value.trim();
+  const email     = form.email.value.trim();
+  const country   = form.country.value;
+  const password  = form.password.value;
+  const confirm   = document.getElementById('confirm-password').value;
+  const terms     = document.getElementById('terms').checked;
+
+  if (!firstName)
+    fail('first_name', 'Please enter your first name.');
+
+  if (!lastName)
+    fail('last_name', 'Please enter your last name.');
+
+  if (!username) {
+    fail('username', 'Please choose a username.');
+    const hint = document.getElementById('username-hint');
+    hint.textContent = '3–30 characters. Letters, numbers and underscores only.';
+    hint.style.color = '';
+  } else if (!/^[A-Za-z0-9_]{3,30}$/.test(username)) {
+    fail('username', 'Username must be 3–30 characters: letters, numbers, and underscores only.');
+  }
+
+  if (!email) {
+    fail('email', 'Please enter your email address.');
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    fail('email', 'That doesn\'t look like a valid email. Try: you@example.com');
+  }
+
+  if (!country)
+    fail('country', 'Please select your country.');
+
+  if (!password) {
+    fail('password', 'Please enter a password.');
+  } else if (password.length < 8) {
+    fail('password', 'Password is too short — use at least 8 characters.');
+  }
+
+  if (!confirm) {
+    fail('confirm_password', 'Please re-enter your password to confirm.');
+  } else if (password && confirm !== password) {
+    fail('confirm_password', 'Passwords don\'t match — please re-enter.');
+  }
+
+  if (!terms)
+    fail('terms', 'You must agree to the Terms of Service to register.');
+
+  // Scroll to the first broken field
+  if (firstErrorId) {
+    KickoffUI.showFormError(form, 'Please correct the highlighted fields.', { errorId: 'reg-error', field: '#' + firstErrorId, title: 'Check your registration details' });
+    return false;
+  }
+  return true;
+}
+
+// ─── Server error → field mapping ────────────────────────────────────────────
+// Each rule tests data.error against a regex and pins it to the right field.
+// Add more rules here if your register.php returns additional error strings.
+const SERVER_ERROR_MAP = [
+  { match: /email.*(taken|exist|use|already|registered)/i, field: 'email',    msg: 'This email is already registered. Try logging in instead.' },
+  { match: /username.*(taken|exist|use|already)/i,         field: 'username', msg: 'This username is already taken. Please choose another.' },
+  { match: /invalid.*email/i,                              field: 'email',    msg: 'The email address you entered is not valid.' },
+  { match: /password.*(short|least|weak|length|minimum)/i, field: 'password', msg: 'Password is too short — use at least 8 characters.' },
+  { match: /password.*match/i,                             field: 'confirm_password', msg: 'Passwords do not match.' },
+  { match: /first.?name/i,                                 field: 'first_name',     msg: 'Please enter a valid first name.' },
+  { match: /last.?name/i,                                  field: 'last_name',      msg: 'Please enter a valid last name.' },
+  { match: /country/i,                                     field: 'country',        msg: 'Please select your country.' },
+];
+
+function handleServerError(errorText) {
+  for (const rule of SERVER_ERROR_MAP) {
+    if (rule.match.test(errorText)) {
+      showFieldError(rule.field, rule.msg);
+      return;
+    }
+  }
+  // Nothing matched — show the raw server message in the top banner
+  showBanner(errorText || 'Registration failed. Please check your details and try again.');
+}
+
+// ─── Username availability check ──────────────────────────────────────────────
+
+let usernameTimer;
+function debounceCheckUsername(val) {
+  clearTimeout(usernameTimer);
+  const hint = document.getElementById('username-hint');
+
+  // Empty — reset to neutral default hint, no API call
+  if (!val) {
+    hint.textContent = '3–30 characters. Letters, numbers and underscores only.';
+    hint.style.color = '';
+    return;
+  }
+
+  // Too short to be valid — show guidance but do NOT call the API yet
+  // This prevents "available" from appearing on a 1–2 char input
+  if (val.length < 3) {
+    hint.textContent = 'Keep typing — username must be at least 3 characters.';
+    hint.style.color = '';
+    return;
+  }
+
+  // Correct length but illegal characters
+  if (!/^[A-Za-z0-9_]{3,30}$/.test(val)) {
+    hint.textContent = 'Only letters, numbers, underscores (3–30 chars)';
+    hint.style.color = '#ff4e00';
+    return;
+  }
+
+  // Valid format — now check availability after debounce
+  hint.textContent = 'Checking availability...';
+  hint.style.color = '';
+  usernameTimer = setTimeout(() => checkUsername(val), 400);
+}
+
+async function checkUsername(val) {
+  const hint = document.getElementById('username-hint');
+  try {
+    const res  = await fetch(`api/auth/check_username.php?username=${encodeURIComponent(val)}`);
+    const data = await res.json();
+    if (data.message === 'Invalid format') {
+      hint.textContent = '✗ Only letters, numbers, and underscores allowed (3–30 chars)';
+      hint.style.color = '#ff4e00';
+    } else if (data.available) {
+      hint.textContent = '✓ Username is available and ready to use';
+      hint.style.color = '#b5f500';
+    } else {
+      hint.textContent = '✗ This username is already in use';
+      hint.style.color = '#ff4e00';
+    }
+  } catch { hint.textContent = 'Could not verify username'; }
+}
+
+// ─── Password strength ────────────────────────────────────────────────────────
+
+function checkStrength(val) {
+  const fill  = document.getElementById('strength-fill');
+  const label = document.getElementById('strength-label');
+  let score = 0;
+  if (val.length >= 8)           score++;
+  if (/[A-Z]/.test(val))         score++;
+  if (/[0-9]/.test(val))         score++;
+  if (/[^A-Za-z0-9]/.test(val))  score++;
+  const levels = [
+    { w:'0%',   c:'transparent', t:'Enter a password' },
+    { w:'25%',  c:'#ff4e00',     t:'Weak' },
+    { w:'50%',  c:'#f5a623',     t:'Fair' },
+    { w:'75%',  c:'#00d9f5',     t:'Good' },
+    { w:'100%', c:'#b5f500',     t:'Strong ✓' }
+  ];
+  const l = levels[score];
+  fill.style.width = l.w; fill.style.background = l.c;
+  label.textContent = l.t; label.style.color = score === 4 ? '#b5f500' : '';
+}
+
+// ─── Form submit ──────────────────────────────────────────────────────────────
+
+document.getElementById('register-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const suc  = document.getElementById('reg-success');
+  const btn  = document.getElementById('reg-btn');
+
+  suc.style.display = 'none';
+
+  // Client-side validation runs first — aborts if anything fails
+  if (!validateForm(form)) return;
+
+  btn.textContent = 'Creating account...'; btn.classList.add('btn-loading'); btn.disabled = true;
+
+  const body = {
+    first_name:     form.first_name.value.trim(),
+    last_name:      form.last_name.value.trim(),
+    username:       form.username.value.trim(),
+    email:          form.email.value.trim(),
+    country:        form.country.value,
+    password:       form.password.value,
+    return_to:      safeReturnTo(pendingReturnTo),
+    terms:          document.getElementById('terms').checked ? 1 : 0,
+  };
+
+  try {
+    const res  = await fetch('api/auth/register.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      suc.textContent = 'Account created! Redirecting...';
+      suc.style.display = 'block';
+      setTimeout(() => window.location.href = data.redirect || 'dashboard.html', 800);
+    } else {
+      // Map server error text to the offending field, or fall back to top banner
+      handleServerError(data.error || '');
+    }
+  } catch {
+    showBanner('Network error. Please check your connection and try again.');
+  } finally {
+    btn.textContent = 'Create Account'; btn.classList.remove('btn-loading'); btn.disabled = false;
+  }
+});
+</script>
+</div>
+</body>
+</html>

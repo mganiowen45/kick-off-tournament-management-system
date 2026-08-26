@@ -1,0 +1,80 @@
+<?php require_once __DIR__ . '/includes/page_guard.php'; requireAdminPage(); ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Finance - KICKOFF Admin</title>
+<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="assets/css/page-overrides.css">
+<script src="assets/js/kickoff-ui.js"></script>
+<script src="includes/nav.js" data-page="admin_transactions" data-layout="admin"></script>
+</head>
+<body>
+<div id="page-main">
+  <div class="sec-tag">Finance</div>
+  <h1 class="sec-title">Payments &amp; <em>Winnings</em></h1>
+  <div class="stats-grid" id="finance-stats"></div>
+  <div class="tab-nav">
+    <button class="tab-btn active" data-tab="payments">Payments</button>
+    <button class="tab-btn" data-tab="ledger">Ledger</button>
+    <button class="tab-btn" data-tab="refunds">Refunds</button>
+    <button class="tab-btn" data-tab="payouts">Payouts</button>
+    <button class="tab-btn" data-tab="webhooks">Webhooks</button>
+  </div>
+  <section class="section-panel">
+    <div class="table-wrap"><table class="data-table"><thead id="finance-head"></thead><tbody id="finance-rows"></tbody></table></div>
+  </section>
+</div>
+<script>
+const esc = value => KickoffUI.escapeHtml(value);
+let financeData = {};
+let activeTab = "payments";
+const columns = {
+  payments: ["Order", "Player", "Tournament", "Amount", "Status", "Created"],
+  ledger: ["Type", "Player", "Tournament", "Direction", "Amount", "Reference"],
+  refunds: ["Order", "Player", "Tournament", "Amount", "Status", "Created"],
+  payouts: ["Player", "Tournament", "Amount", "Status", "Approved", "Paid"],
+  webhooks: ["Provider", "Event", "Order", "Verified", "Processed", "Created"]
+};
+function money(amount, currency) { return `${esc(currency || "TZS")} ${Number(amount || 0).toLocaleString()}`; }
+function statusBadge(status) {
+  const cls = ["paid", "approved", "processed"].includes(status) ? "badge-win" : ["failed", "cancelled", "rejected"].includes(status) ? "badge-loss" : "badge-soon";
+  return `<span class="badge ${cls}">${esc(status || "-")}</span>`;
+}
+function renderStats() {
+  const s = financeData.summary || {};
+  document.getElementById("finance-stats").innerHTML = `
+    <div class="stat-card"><span class="stat-num">${Number(s.payment_count || 0)}</span><span class="stat-label">Payments</span></div>
+    <div class="stat-card"><span class="stat-num">${Number(s.paid_total || 0).toLocaleString()}</span><span class="stat-label">Paid TZS</span></div>
+    <div class="stat-card"><span class="stat-num">${Number(s.pending_total || 0).toLocaleString()}</span><span class="stat-label">Pending TZS</span></div>
+    <div class="stat-card"><span class="stat-num">${Number(s.failed_count || 0)}</span><span class="stat-label">Failed</span></div>`;
+}
+function row(item) {
+  if (activeTab === "payments") return `<tr><td>${esc(item.order_reference)}</td><td>${esc(item.username)}</td><td>${esc(item.tournament_name)}</td><td>${money(item.amount, item.currency)}</td><td>${statusBadge(item.status)}</td><td>${esc(item.created_at)}</td></tr>`;
+  if (activeTab === "ledger") return `<tr><td>${esc(item.entry_type)}</td><td>${esc(item.username || "-")}</td><td>${esc(item.tournament_name || "-")}</td><td>${esc(item.direction)}</td><td>${money(item.amount, item.currency)}</td><td>${esc(item.reference || "-")}</td></tr>`;
+  if (activeTab === "refunds") return `<tr><td>${esc(item.order_reference)}</td><td>${esc(item.username)}</td><td>${esc(item.tournament_name)}</td><td>${money(item.amount, item.currency)}</td><td>${statusBadge(item.status)}</td><td>${esc(item.created_at)}</td></tr>`;
+  if (activeTab === "payouts") return `<tr><td>${esc(item.username)}</td><td>${esc(item.tournament_name)}</td><td>${money(item.amount, item.currency)}</td><td>${statusBadge(item.status)}</td><td>${esc(item.approved_at || "-")}</td><td>${esc(item.paid_at || "-")}</td></tr>`;
+  return `<tr><td>${esc(item.provider)}</td><td>${esc(item.event_type)}</td><td>${esc(item.order_reference || "-")}</td><td>${Number(item.verified || 0) ? "Yes" : "No"}</td><td>${esc(item.processed_at || "-")}</td><td>${esc(item.created_at)}</td></tr>`;
+}
+function renderTable() {
+  document.getElementById("finance-head").innerHTML = `<tr>${columns[activeTab].map(c => `<th>${c}</th>`).join("")}</tr>`;
+  const items = financeData[activeTab] || [];
+  document.getElementById("finance-rows").innerHTML = items.length ? items.map(row).join("") : `<tr><td colspan="6"><div class="empty-state" style="min-height:90px;">No records yet.</div></td></tr>`;
+}
+async function load() {
+  const res = await fetch("api/admin/finance.php", { credentials: "same-origin" });
+  financeData = await res.json();
+  renderStats();
+  renderTable();
+}
+document.querySelectorAll("[data-tab]").forEach(btn => btn.addEventListener("click", () => {
+  document.querySelectorAll("[data-tab]").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  activeTab = btn.dataset.tab;
+  renderTable();
+}));
+load();
+</script>
+</body>
+</html>

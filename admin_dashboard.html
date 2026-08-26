@@ -1,0 +1,125 @@
+<?php require_once __DIR__ . '/includes/page_guard.php'; requireAdminPage(); ?>
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Dashboard — KICKOFF</title>
+<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="assets/css/page-overrides.css">
+
+<script src="assets/js/kickoff-ui.js"></script>
+<script src="includes/nav.js" data-page="admin_dashboard" data-layout="admin"></script>
+</head>
+<body>
+
+<div class="admin-banner">⚠ Administrator Panel &nbsp;·&nbsp; Full platform access &nbsp;·&nbsp; Handle with care</div>
+<div id="page-main">
+    <div class="sec-tag">Platform Overview</div>
+    <h1 class="sec-title" style="margin-bottom:1.5rem;">Admin <em>Dashboard</em></h1>
+    <div class="stats-row" id="stats-row" style="margin-bottom:2rem;">
+      <div class="stat-card"><span class="stat-num">–</span><span class="stat-label">Total Users</span></div>
+      <div class="stat-card"><span class="stat-num">–</span><span class="stat-label">Active Tournaments</span></div>
+      <div class="stat-card"><span class="stat-num" style="color:var(--fire);">–</span><span class="stat-label">Open Disputes</span></div>
+      <div class="stat-card"><span class="stat-num">–</span><span class="stat-label">Matches Today</span></div>
+      <div class="stat-card"><span class="stat-num">–</span><span class="stat-label">New Users Today</span></div>
+    </div>
+    <div class="two-col">
+      <div>
+        <div class="sec-h"><div class="sec-h-title">Active Tournaments</div><a href="admin_tournaments.html" class="sec-h-link">View all</a></div>
+        <div id="tournaments-list"><div style="color:var(--muted);font-size:.82rem;">Loading...</div></div>
+      </div>
+      <div>
+        <div class="sec-h"><div class="sec-h-title">Pending Disputes <span style="color:var(--fire);margin-left:4px;" id="dot-badge">●</span></div><a href="admin_disputes.html" class="sec-h-link">Review all →</a></div>
+        <div id="disputes-list"><div style="color:var(--muted);font-size:.82rem;">Loading...</div></div>
+      </div>
+      <div>
+        <div class="sec-h"><div class="sec-h-title">New Users Today</div><a href="admin_users.html" class="sec-h-link">Manage →</a></div>
+        <div id="users-list"><div style="color:var(--muted);font-size:.82rem;">Loading...</div></div>
+      </div>
+      <div>
+        <div class="sec-h"><div class="sec-h-title">Matches This Week</div></div>
+        <div class="card" id="weekly-chart"><div style="color:var(--muted);font-size:.82rem;padding:.5rem 0;">Loading...</div></div>
+      </div>
+    </div>
+    <div>
+      <div class="sec-h"><div class="sec-h-title">Platform Activity Log</div></div>
+      <div class="card" style="padding:.9rem 1.1rem;" id="activity-log"><div style="color:var(--muted);font-size:.82rem;">Loading...</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+function timeAgo(dt) {
+  if (!dt) return '';
+  const diff = Math.floor((Date.now()-new Date(dt))/1000);
+  if (diff<60) return 'just now'; if (diff<3600) return Math.floor(diff/60)+'m ago';
+  if (diff<86400) return Math.floor(diff/3600)+'h ago'; return Math.floor(diff/86400)+'d ago';
+}
+
+async function init() {
+  const sRes  = await fetch('api/users/session.php');
+  const sData = await sRes.json();
+  if (!sData.logged_in || sData.user.role !== 'admin') { window.location.href = sData.logged_in ? 'dashboard.html' : 'login.html'; return; }
+
+  const res  = await fetch('api/admin/stats.php');
+  const data = await res.json();
+  if (!data.success) return;
+
+  // Stats row
+  document.getElementById('stats-row').innerHTML = `
+    <div class="stat-card"><span class="stat-num">${data.totalUsers.toLocaleString()}</span><span class="stat-label">Total Users</span></div>
+    <div class="stat-card"><span class="stat-num">${data.activeTourn}</span><span class="stat-label">Active Tournaments</span></div>
+    <div class="stat-card"><span class="stat-num" style="color:var(--fire);">${data.openDisputes}</span><span class="stat-label">Open Disputes</span></div>
+    <div class="stat-card"><span class="stat-num">${data.matchesToday}</span><span class="stat-label">Matches Today</span></div>
+    <div class="stat-card"><span class="stat-num">${data.newUsersToday}</span><span class="stat-label">New Users Today</span></div>`;
+
+  // Disputes badge
+  if (data.openDisputes > 0) {
+    document.getElementById('dispute-badge').textContent = data.openDisputes;
+    document.getElementById('dispute-badge').style.display = 'inline';
+  }
+
+  // Load disputes
+  const dRes  = await fetch('api/disputes/list.php');
+  const dData = await dRes.json();
+  const openD = dData.open || [];
+  document.getElementById('disputes-list').innerHTML = openD.length
+    ? openD.map((d,i) => `
+        <div class="dispute-row" onclick="location.href='../admin_disputes.html'">
+          <div class="dr-top"><span class="dr-id">DISP-${String(d.dispute_id).padStart(3,'0')}</span><span class="dr-age">${timeAgo(d.created_at)}</span></div>
+          <div class="dr-match">${d.player1_username} vs ${d.player2_username}</div>
+          <div class="dr-sub">${d.tournament_name} · ${d.reason||'Conflicting results'}</div>
+        </div>`).join('')
+    : '<div style="color:var(--lime);font-family:var(--font-b);font-size:.82rem;padding:.5rem 0;">✓ No open disputes</div>';
+
+  // Users list (new today) — load from users_list
+  const uRes  = await fetch('../api/admin/users_list.php?limit=4&page=1');
+  const uData = await uRes.json();
+  document.getElementById('users-list').innerHTML = (uData.users||[]).slice(0,4).map(u => `
+    <div class="user-row">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div class="u-av">${u.username.substring(0,2).toUpperCase()}</div>
+        <div><div class="u-name">${u.username}</div><div class="u-sub">🌍 ${u.country||'?'} · ${u.preferred_game||'?'}</div></div>
+      </div>
+      <span class="badge badge-open">Active</span>
+    </div>`).join('') || '<div style="color:var(--muted);font-size:.82rem;">No new users today</div>';
+
+  // Weekly chart
+  const maxCount = Math.max(...(data.weekly||[]).map(d=>d.count), 1);
+  document.getElementById('weekly-chart').innerHTML = (data.weekly||[]).map(d => {
+    const pct = Math.round((d.count/maxCount)*100);
+    const label = new Date(d.day).toLocaleDateString('en',{weekday:'short'});
+    return `<div class="chart-row"><div class="chart-label">${label}</div><div class="chart-bar-bg"><div style="height:100%;width:${pct}%;background:var(--lime);"></div></div><div class="chart-val">${d.count}</div></div>`;
+  }).join('') || '<div style="color:var(--muted);font-size:.82rem;">No data yet</div>';
+
+  // Activity
+  document.getElementById('activity-log').innerHTML = (data.activity||[]).map(a => {
+    const dotColor = a.type==='dispute_raised'?'var(--fire)':a.type==='new_user'?'#00d9f5':'#b5f500';
+    return `<div class="act-item"><div class="a-dot" style="background:${dotColor};"></div><div class="a-txt">${a.detail}</div><div class="a-t">${timeAgo(a.time)}</div></div>`;
+  }).join('') || '<div style="color:var(--muted);font-size:.82rem;">No recent activity</div>';
+}
+
+init();
+</script>
+</body>
+</html>

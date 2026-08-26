@@ -1,0 +1,84 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leaderboard — KICKOFF</title>
+<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="assets/css/page-overrides.css">
+
+<script src="assets/js/kickoff-ui.js"></script>
+<script src="includes/nav.js" data-page="leaderboard" data-layout="adaptive"></script>
+</head>
+<body>
+
+<div id="page-main">
+    <div class="sec-tag">Player Rankings</div>
+    <h1 class="sec-title">Global <em>Leaderboard</em></h1>
+    <table class="lb-table">
+      <thead><tr><th>#</th><th>Player</th><th>Country</th><th>Matches</th><th>Win Rate</th><th>Points</th></tr></thead>
+      <tbody id="lb-tbody"><tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--muted);">Loading...</td></tr></tbody>
+    </table>
+    <div id="lb-pagination" style="display:flex;gap:6px;margin-top:1.2rem;"></div>
+  </div>
+
+<script>
+let currentUser = null;
+let currentPage = 1;
+
+const rankColors = ['#ffd700','#c0c0c0','#cd7f32'];
+const avColors   = ['rgba(255,215,0,.1)','rgba(192,192,192,.1)','rgba(205,127,50,.1)','rgba(181,245,0,.08)','rgba(0,217,245,.08)'];
+const avTColors  = ['#ffd700','#c0c0c0','#cd7f32','#b5f500','#00d9f5'];
+const esc = value => KickoffUI.escapeHtml(value);
+
+async function init() {
+  const sRes  = await fetch('api/users/session.php');
+  const sData = await sRes.json();
+  if (sData.logged_in) {
+    currentUser = sData.user;
+    const navUsername = document.getElementById('nav-username');
+    if (navUsername) navUsername.textContent = sData.user.username;
+  }
+  loadLeaderboard(1);
+}
+
+async function loadLeaderboard(page) {
+  currentPage = page;
+  const res  = await fetch(`api/users/leaderboard.php?page=${page}&limit=20`);
+  const data = await res.json();
+  if (!data.success) return;
+
+  const tbody = document.getElementById('lb-tbody');
+  tbody.innerHTML = data.players.map((p,i) => {
+    const rank    = p.global_rank;
+    const rnkCls  = rank <= 3 ? `r${rank}` : '';
+    const isMe    = currentUser && p.id == currentUser.id;
+    const avBg    = avColors[Math.min(rank-1,4)];
+    const avTxt   = avTColors[Math.min(rank-1,4)];
+    const wrWidth = Math.round(p.win_rate_pct);
+    return `<tr class="${isMe?'me':''}">
+      <td><span class="rnk ${rnkCls}">${rank}</span></td>
+      <td><div class="pc"><div class="pav" style="background:${avBg};color:${avTxt};"><img src="${esc(p.avatar_url)}" alt=""></div>
+        <div><div class="pname" style="${isMe?'color:var(--lime)':''}">${esc(p.username)}${isMe?' *':''}</div></div></div></td>
+      <td style="color:var(--muted);font-size:.85rem;">${esc(p.country||'-')}</td>
+      <td style="color:var(--muted);">${p.total_matches}</td>
+      <td><span style="font-size:.85rem;font-family:var(--font-b);">${p.win_rate_pct}%</span><span class="wr-bar"><span class="wr-fill" style="width:${wrWidth}%;display:block;"></span></span></td>
+      <td><span class="pts">${p.points.toLocaleString()}</span></td>
+    </tr>`;
+  }).join('');
+
+  // Pagination
+  const pg   = data.pagination;
+  const pdiv = document.getElementById('lb-pagination');
+  pdiv.innerHTML = '';
+  for (let i = 1; i <= Math.min(pg.total_pages, 10); i++) {
+    const btn = document.createElement('button');
+    btn.textContent = i; btn.className = 'pg-btn' + (i === page ? ' active' : '');
+    btn.onclick = () => loadLeaderboard(i);
+    pdiv.appendChild(btn);
+  }
+}
+
+init();
+</script>
+</body>
+</html>

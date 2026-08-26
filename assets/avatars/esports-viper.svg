@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Viper esports avatar">
+  <rect width="256" height="256" rx="48" fill="#07120c"/><path d="M128 21l82 42-14 117-68 55-68-55L46 63z" fill="#123321" stroke="#b5f500" stroke-width="6"/>
+  <path d="M75 87l53-42 53 42-17 89-36 32-36-32z" fill="#07120c"/><path d="M80 99l43 11-20 28-30-18zm96 0-43 11 20 28 30-18z" fill="#b5f500"/>
+  <path d="M104 160l24 13 24-13-8 28h-32z" fill="#00d9f5"/><path d="M128 45v58" stroke="#b5f500" stroke-width="5"/>
+</svg>

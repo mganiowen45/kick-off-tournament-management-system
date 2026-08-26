@@ -1,0 +1,46 @@
+<?php require_once __DIR__ . '/includes/page_guard.php'; requireAdminPage(); ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cancellations - KICKOFF Admin</title>
+<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="assets/css/page-overrides.css">
+<script src="assets/js/kickoff-ui.js"></script>
+<script src="includes/nav.js" data-page="admin_cancellations" data-layout="admin"></script>
+</head>
+<body>
+<div id="page-main">
+  <div class="sec-tag">Review Queue</div>
+  <h1 class="sec-title">Cancellation <em>Requests</em></h1>
+  <section class="section-panel">
+    <div class="table-wrap"><table class="data-table"><thead><tr><th>Tournament</th><th>Requested By</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead><tbody id="cancel-rows"></tbody></table></div>
+  </section>
+</div>
+<script>
+const esc = value => KickoffUI.escapeHtml(value);
+function badge(status) { return `<span class="badge ${status === "pending" ? "badge-soon" : status === "approved" ? "badge-win" : "badge-loss"}">${esc(status)}</span>`; }
+async function load() {
+  const res = await fetch("api/admin/cancellation_requests.php", { credentials: "same-origin" });
+  const data = await res.json();
+  document.getElementById("cancel-rows").innerHTML = (data.requests || []).map(r => `<tr>
+    <td><strong>${esc(r.tournament_name)}</strong><div class="text-muted">${esc(r.tournament_status)}</div></td>
+    <td>${esc(r.requested_by_username)}</td>
+    <td>${esc(r.reason)}</td>
+    <td>${badge(r.status)}${r.admin_note ? `<div class="text-muted">${esc(r.admin_note)}</div>` : ""}</td>
+    <td>${r.status === "pending" ? `<button class="btn-lime" onclick="decide(${Number(r.id)},'approved')">Approve</button> <button class="btn-danger" onclick="decide(${Number(r.id)},'rejected')">Reject</button>` : esc(r.reviewed_by_username || "-")}</td>
+  </tr>`).join("") || `<tr><td colspan="5"><div class="empty-state" style="min-height:90px;">No cancellation requests.</div></td></tr>`;
+}
+async function decide(id, decision) {
+  const admin_note = await KickoffUI.prompt({ title: decision === "approved" ? "Approve Cancellation" : "Reject Cancellation", message: "Optional admin note.", okText: "Submit", maxLength: 1000 });
+  if (admin_note === null) return;
+  const res = await fetch("api/admin/cancellation_requests.php", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ id, decision, admin_note }) });
+  const data = await res.json();
+  KickoffUI.toast(data.success ? "Request reviewed." : (data.error || "Could not review request."), data.success ? "success" : "error");
+  load();
+}
+load();
+</script>
+</body>
+</html>

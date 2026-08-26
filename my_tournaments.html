@@ -1,0 +1,36 @@
+<?php require_once __DIR__ . '/includes/page_guard.php'; requirePlayerPage(); ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Tournaments - KICKOFF</title>
+<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="assets/css/page-overrides.css">
+<link rel="stylesheet" href="assets/css/tournament-cards.css">
+<script src="assets/js/kickoff-ui.js"></script>
+<script src="assets/js/tournament-card.js"></script>
+<script src="includes/nav.js" data-page="my_tournaments" data-layout="app"></script>
+</head>
+<body>
+<div id="page-main">
+  <div class="sec-tag">Player Hub</div>
+  <h1 class="sec-title">My <em>Tournaments</em></h1>
+  <div class="t-grid" id="my-grid"><div class="empty-state"><p>Loading...</p></div></div>
+</div>
+<script>
+async function load() {
+  const [sessionRes, tournamentsRes] = await Promise.all([
+    fetch("api/users/session.php", { credentials: "same-origin" }),
+    fetch("api/tournaments/list.php?limit=100&mine=1", { credentials: "same-origin" })
+  ]);
+  const session = await sessionRes.json();
+  const data = await tournamentsRes.json();
+  const uid = Number(session.user && session.user.id);
+  const items = (data.tournaments || []).filter(t => t.joined === true || Number(t.creator_id) === uid);
+  document.getElementById("my-grid").innerHTML = items.length ? items.map(t => KickoffTournamentCard.render(t, { authenticated: true, currentUser: session.user })).join("") : `<div class="empty-state"><p>You have not joined a tournament yet.</p></div>`;
+}
+load();
+</script>
+</body>
+</html>

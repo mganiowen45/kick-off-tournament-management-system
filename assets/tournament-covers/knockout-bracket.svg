@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" role="img" aria-label="Knockout bracket tournament cover">
+  <rect width="1200" height="675" fill="#111827"/>
+  <path d="M0 0 H1200 V675 H0 Z" fill="#16212f"/>
+  <g fill="none" stroke="#00d9f5" stroke-width="9" stroke-linecap="round" opacity=".9">
+    <path d="M170 150 H360 V245 H500"/>
+    <path d="M170 340 H360 V245"/>
+    <path d="M170 430 H360 V525 H500"/>
+    <path d="M170 615 H360 V525"/>
+    <path d="M500 245 H700 V338 H820"/>
+    <path d="M500 525 H700 V338"/>
+  </g>
+  <g fill="#0f1724" stroke="#b5f500" stroke-width="5">
+    <rect x="100" y="116" width="150" height="68" rx="8"/><rect x="100" y="306" width="150" height="68" rx="8"/>
+    <rect x="100" y="396" width="150" height="68" rx="8"/><rect x="100" y="581" width="150" height="68" rx="8"/>
+    <rect x="470" y="211" width="150" height="68" rx="8"/><rect x="470" y="491" width="150" height="68" rx="8"/>
+    <rect x="810" y="304" width="190" height="76" rx="8"/>
+  </g>
+  <path d="M990 338 L1075 292 L1075 384 Z" fill="#b5f500"/>
+</svg>

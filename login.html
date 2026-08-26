@@ -1,0 +1,229 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login — KICKOFF</title>
+<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="assets/css/page-overrides.css">
+
+<script src="assets/js/kickoff-ui.js"></script>
+<script src="includes/nav.js" data-page="login" data-layout="auth"></script>
+
+<style>
+  .form-input.field-error {
+    border-color: #ff4e00 !important;
+    box-shadow: 0 0 0 2px rgba(255, 78, 0, 0.18) !important;
+  }
+  .form-input.field-error:focus {
+    border-color: var(--cyan, #00d9f5) !important;
+    box-shadow: 0 0 0 2px rgba(0, 217, 245, 0.18) !important;
+  }
+  .field-error-msg {
+    color: #ff4e00;
+    font-size: .75rem;
+    margin-top: 4px;
+    display: none;
+  }
+  .field-error-msg.visible {
+    display: block;
+  }
+</style>
+</head>
+<body>
+<div id="page-main">
+<div class="auth-glow"></div>
+<div class="auth-page">
+  <div class="auth-box">
+    <div class="auth-header">
+      <a href="index.html" class="auth-logo">KICK<span>OFF</span></a>
+      <h1>Welcome Back</h1>
+      <p>Sign in to access your tournaments and matches</p>
+    </div>
+    <div class="auth-card">
+      <div class="alert-error" id="login-error"></div>
+      <form id="login-form" data-error-target="login-error" novalidate>
+        <div class="form-group">
+          <label class="form-label">Username or Email</label>
+          <input type="text" class="form-input" id="identifier" placeholder="Username or email address" autocomplete="username">
+          <div class="field-error-msg" id="err-identifier"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input type="password" class="form-input" id="password" placeholder="Your password" autocomplete="current-password">
+          <div class="field-error-msg" id="err-password"></div>
+        </div>
+        <div class="remember-row">
+          <label class="remember-check">
+            <input type="checkbox" id="remember"> Remember me
+          </label>
+          <a href="#" class="forgot-link" onclick="KickoffUI.toast('Password reset is not yet available. Please contact an admin.');return false;">Forgot password?</a>
+        </div>
+        <button type="submit" class="btn-lime btn-full" id="login-btn">Sign In</button>
+      </form>
+    </div>
+
+    <div class="auth-footer">
+      Don't have an account? <a href="register.html" id="register-link">Register for free</a>
+    </div>
+  </div>
+</div>
+
+<script>
+const authParams = new URLSearchParams(location.search);
+const pendingReturnTo = authParams.get('return_to') || '';
+function safeReturnTo(value) {
+  const v = String(value || '').trim();
+  if (!v || v.length > 300 || /^[a-z][a-z0-9+.-]*:/i.test(v) || v.includes('//') || v.includes('\\')) return '';
+  if (!/^[A-Za-z0-9_.-]+\.html(?:\?[A-Za-z0-9%_.~=&+-]*)?$/.test(v) || v.startsWith('admin_')) return '';
+  return v;
+}
+function withReturnTo(page) {
+  const safe = safeReturnTo(pendingReturnTo);
+  return safe ? `${page}?return_to=${encodeURIComponent(safe)}` : page;
+}
+document.getElementById('register-link').href = withReturnTo('register.html');
+
+// Redirect if already logged in
+(async () => {
+  try {
+    const res = await fetch('api/users/session.php');
+    const d   = await res.json();
+    const returnTo = safeReturnTo(pendingReturnTo);
+    if (d.logged_in) {
+      window.location.href = d.user.role === 'admin'
+        ? 'admin_dashboard.html'
+        : (Number(d.user.profile_setup_completed || 0) === 1 ? (returnTo || 'dashboard.html') : withReturnTo('profile_setup.html'));
+    }
+  } catch {}
+})();
+
+// ─── Field error helpers ──────────────────────────────────────────────────────
+
+function setFieldError(fieldId, message) {
+  const input = document.getElementById(fieldId);
+  const msg   = document.getElementById('err-' + fieldId);
+  if (input) {
+    input.classList.add('field-error');
+    input.addEventListener('input', () => clearFieldError(fieldId), { once: true });
+  }
+  if (msg) { msg.textContent = message; msg.classList.add('visible'); }
+}
+
+function clearFieldError(fieldId) {
+  const input = document.getElementById(fieldId);
+  const msg   = document.getElementById('err-' + fieldId);
+  if (input) input.classList.remove('field-error');
+  if (msg)   { msg.textContent = ''; msg.classList.remove('visible'); }
+}
+
+function clearAllErrors() {
+  KickoffUI.hideFormError(document.getElementById('login-form'), { errorId: 'login-error' });
+}
+
+// ─── Map server error text → the right field ─────────────────────────────────
+// Keys must match what your login.php returns in data.error.
+// Extend this list if your server returns other strings.
+const SERVER_ERROR_MAP = [
+  { match: /password.*(incorrect|wrong|invalid|match)/i, field: 'password',   msg: 'Incorrect password. Please try again.' },
+  { match: /password/i,                                  field: 'password',   msg: 'Password is incorrect.' },
+  { match: /user.*(not found|exist|registered)/i,        field: 'identifier', msg: 'No account found with that username or email.' },
+  { match: /username.*(not found|exist|invalid)/i,       field: 'identifier', msg: 'No account found with that username.' },
+  { match: /email.*(not found|exist|invalid)/i,          field: 'identifier', msg: 'No account found with that email address.' },
+  { match: /account.*(banned|suspended|disabled)/i,      field: 'identifier', msg: 'This account has been suspended. Contact an admin.' },
+  { match: /invalid.*(credential|login)/i,               field: 'password',   msg: 'Incorrect username/email or password.' },
+];
+
+function handleServerError(errorText) {
+  for (const rule of SERVER_ERROR_MAP) {
+    if (rule.match.test(errorText)) {
+      setFieldError(rule.field, rule.msg);
+      KickoffUI.showFormError(document.getElementById('login-form'), rule.msg, { errorId: 'login-error', field: '#' + rule.field, title: 'Sign in failed' });
+      return;
+    }
+  }
+  // No field matched — show generic banner
+  KickoffUI.showFormError(document.getElementById('login-form'), errorText || 'Login failed. Please check your details.', { errorId: 'login-error', title: 'Sign in failed' });
+}
+
+// ─── Client-side validation ───────────────────────────────────────────────────
+
+function validateForm() {
+  clearAllErrors();
+  let firstErrorId = null;
+
+  function fail(fieldId, message) {
+    setFieldError(fieldId, message);
+    if (!firstErrorId) firstErrorId = fieldId;
+  }
+
+  const identifier = document.getElementById('identifier').value.trim();
+  const password   = document.getElementById('password').value;
+
+  if (!identifier)
+    fail('identifier', 'Please enter your username or email address.');
+
+  if (!password)
+    fail('password', 'Please enter your password.');
+
+  if (firstErrorId) {
+    KickoffUI.showFormError(document.getElementById('login-form'), 'Please correct the highlighted fields.', { errorId: 'login-error', field: '#' + firstErrorId, title: 'Check your sign in details' });
+    return false;
+  }
+  return true;
+}
+
+// ─── Form submit ──────────────────────────────────────────────────────────────
+
+// FIX: Helper keeps button reset logic in one place — always called in finally
+function resetBtn() {
+  const btn = document.getElementById('login-btn');
+  btn.textContent = 'Sign In';
+  btn.classList.remove('btn-loading');
+  btn.disabled = false;
+}
+
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('login-btn');
+
+  if (!validateForm()) return;
+
+  btn.textContent = 'Signing in...';
+  btn.classList.add('btn-loading');
+  btn.disabled = true;
+
+  try {
+    const res  = await fetch('api/auth/login.php', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        identifier: document.getElementById('identifier').value.trim(),
+        password:   document.getElementById('password').value,
+        remember:   document.getElementById('remember').checked ? 1 : 0,
+        return_to:  safeReturnTo(pendingReturnTo),
+      })
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      // Successful login — keep button in loading state during redirect
+      btn.textContent = 'Redirecting...';
+      window.location.href = data.redirect || 'dashboard.html';
+    } else {
+      // FIX: Reset button immediately so user can try again without refreshing
+      resetBtn();
+      handleServerError(data.error || '');
+    }
+
+  } catch {
+    // FIX: Network error also resets the button
+    resetBtn();
+    KickoffUI.showFormError(document.getElementById('login-form'), 'Network error. Please check your connection and try again.', { errorId: 'login-error', title: 'Sign in failed' });
+  }
+});
+</script>
+</div>
+</body>
+</html>

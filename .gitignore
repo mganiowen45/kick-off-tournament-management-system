@@ -1,0 +1,14 @@
+.env
+storage/logs/*
+storage/cache/*
+storage/evidence/*
+storage/tournament-images/*
+uploads/results/*
+uploads/evidence/*
+*.log
+*.tmp
+
+!storage/logs/.gitkeep
+!storage/cache/.gitkeep
+!storage/evidence/.gitkeep
+!storage/tournament-images/.gitkeep

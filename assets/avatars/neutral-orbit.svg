@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Orbit neutral avatar">
+  <defs><radialGradient id="o"><stop stop-color="#213a57"/><stop offset="1" stop-color="#07131c"/></radialGradient></defs><rect width="256" height="256" rx="48" fill="url(#o)"/>
+  <circle cx="128" cy="128" r="69" fill="#101c2b" stroke="#00d9f5" stroke-width="6"/><ellipse cx="128" cy="128" rx="103" ry="38" fill="none" stroke="#b5f500" stroke-width="7" transform="rotate(-19 128 128)"/>
+  <circle cx="104" cy="118" r="10" fill="#00d9f5"/><circle cx="152" cy="118" r="10" fill="#00d9f5"/><path d="M98 154q30 20 60 0" fill="none" stroke="#b5f500" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="210" cy="87" r="13" fill="#ff4e00"/>
+</svg>

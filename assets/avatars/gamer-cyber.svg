@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Cyber gamer avatar">
+  <rect width="256" height="256" rx="48" fill="#0b0714"/><path d="M34 52l45-28 49 20 49-20 45 28-14 171H48z" fill="#17102b" stroke="#a855f7" stroke-width="5"/>
+  <circle cx="128" cy="106" r="52" fill="#9d654b"/><path d="M73 95q8-67 55-67t57 68l-25-22-67 5z" fill="#0b0714"/>
+  <path d="M49 238q9-87 79-87t80 87" fill="#7c3aed"/><path d="M78 98l47 8-12 25-36-9zm100 0l-47 8 12 25 36-9z" fill="#00d9f5"/>
+  <path d="M118 116h20" stroke="#00d9f5" stroke-width="5"/><path d="M108 142h40" stroke="#e9d5ff" stroke-width="6" stroke-linecap="round"/>
+</svg>

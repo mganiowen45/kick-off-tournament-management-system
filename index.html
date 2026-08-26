@@ -1,0 +1,236 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KICKOFF - Tournament Platform</title>
+<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="assets/css/page-overrides.css">
+<link rel="stylesheet" href="assets/css/tournament-cards.css">
+
+<script src="assets/js/kickoff-ui.js"></script>
+<script src="assets/js/tournament-card.js"></script>
+<script src="includes/nav.js" data-page="home" data-layout="public"></script>
+</head>
+<body>
+<div id="page-main">
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-glow"></div>
+  <div class="hero-grid"></div>
+  <div class="hero-tag">Tournaments Open Now</div>
+  <h1><span class="line1">Compete. Win.</span><span class="line2">Dominate.</span></h1>
+  <p class="hero-sub">The online football gaming tournament platform for Mobile, PC, and Console players. Register, create or join tournaments, submit match results, and climb the global leaderboard.</p>
+  <div class="hero-cta">
+    <a href="register.html" class="btn-lime" id="cta-main">Get Started — It's Free</a>
+    <a href="tournaments.html" class="btn-ghost">Browse Tournaments</a>
+  </div>
+  <div class="hero-stats">
+    <div class="hs-item"><span class="hs-num" id="stat-players">–</span><span class="hs-lbl">Players</span></div>
+    <div class="hs-divider"></div>
+    <div class="hs-item"><span class="hs-num" id="stat-tournaments">–</span><span class="hs-lbl">Active Tournaments</span></div>
+    <div class="hs-divider"></div>
+    <div class="hs-item"><span class="hs-num" id="stat-matches">–</span><span class="hs-lbl">Matches Played</span></div>
+    <div class="hs-divider"></div>
+    <div class="hs-item"><span class="hs-num">3</span><span class="hs-lbl">Formats</span></div>
+  </div>
+</section>
+
+<!-- Supported Games -->
+<section class="supported-games-section">
+  <div class="sec-tag">Supported Games</div>
+  <h2 class="sec-title" style="margin-bottom:.4rem;">Supported <em>Games</em></h2>
+  <p class="section-sub">Compete in your favourite football games across Mobile, PC and Console.</p>
+  <div class="supported-games-grid" id="supported-games-grid">
+    <div style="padding:1.2rem;color:var(--muted);font-size:.84rem;">Loading supported games...</div>
+  </div>
+</section>
+
+<!-- Live Tournaments -->
+<section class="live-section">
+  <div class="sec-tag">Happening Now</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1.5rem;">
+    <h2 class="sec-title" style="margin:0;">Live & Open <em>Tournaments</em></h2>
+    <a href="tournaments.html" class="btn-ghost">View All →</a>
+  </div>
+  <div class="live-grid" id="live-grid">
+    <div style="padding:2rem;color:var(--muted);font-size:.84rem;">Loading tournaments...</div>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="features-section">
+  <div class="sec-tag">Why KICKOFF</div>
+  <h2 class="sec-title" style="margin-bottom:1.5rem;">Everything You Need to <em>Compete</em></h2>
+  <div class="feat-grid">
+    <div class="feat-card">
+      <span class="feat-icon"><i class="fa-solid fa-trophy"></i></span>
+      <div class="feat-title">3 Tournament Formats</div>
+      <p class="feat-desc">1v1 duels, full knockout brackets, and group-stage knockout competitions. Pick the competition style that suits your skills.</p>
+    </div>
+    <div class="feat-card">
+      <span class="feat-icon"><i class="fa-solid fa-camera"></i></span>
+      <div class="feat-title">Screenshot Verification</div>
+      <p class="feat-desc">Both players submit their result. If scores match, it's auto-confirmed instantly. Disputes go to admin review.</p>
+    </div>
+    <div class="feat-card">
+      <span class="feat-icon"><i class="fa-solid fa-chart-line"></i></span>
+      <div class="feat-title">Live Leaderboards</div>
+      <p class="feat-desc">Every confirmed result updates your global rank, win rate, and points in real time. No waiting for season resets.</p>
+    </div>
+    <div class="feat-card">
+      <span class="feat-icon"><i class="fa-brands fa-whatsapp"></i></span>
+      <div class="feat-title">Match Coordination</div>
+      <p class="feat-desc">Players can opt in to WhatsApp contact for assigned matches, with scheduling tools and admin oversight.</p>
+    </div>
+    <div class="feat-card">
+      <span class="feat-icon"><i class="fa-solid fa-bolt"></i></span>
+      <div class="feat-title">Instant Setup</div>
+      <p class="feat-desc">Create a tournament in under 2 minutes. Set the format, capacity, cover, entry model, and prize preview.</p>
+    </div>
+    <div class="feat-card">
+      <span class="feat-icon"><i class="fa-solid fa-shield-halved"></i></span>
+      <div class="feat-title">Fair Play Admin</div>
+      <p class="feat-desc">Dedicated admin review for all disputes. Ban and warning system for rule breakers. Fair for everyone.</p>
+    </div>
+  </div>
+</section>
+
+<!-- How it works -->
+<section class="how-section">
+  <div class="sec-tag">Getting Started</div>
+  <h2 class="sec-title" style="margin-bottom:.4rem;">How It <em>Works</em></h2>
+  <p style="font-family:var(--font-b);font-size:.84rem;color:var(--muted);margin-bottom:2rem;">From signup to champion in four steps</p>
+  <div class="steps">
+    <div class="step"><div class="step-num">01</div><div class="step-title">Create Account</div><p class="step-desc">Register in seconds, then add the game and platform identities you compete with.</p></div>
+    <div class="step"><div class="step-num">02</div><div class="step-title">Join or Create</div><p class="step-desc">Browse open tournaments and join with one click — or create your own with custom rules and prize pool.</p></div>
+    <div class="step"><div class="step-num">03</div><div class="step-title">Play & Submit</div><p class="step-desc">Play your match, then upload a screenshot of the final score. Both players confirm — results are verified automatically.</p></div>
+    <div class="step"><div class="step-num">04</div><div class="step-title">Climb the Ranks</div><p class="step-desc">Every win earns you points and improves your global rank. Dominate your division and get crowned champion.</p></div>
+  </div>
+</section>
+
+<!-- Leaderboard Preview + CTA -->
+<section style="padding:5rem 2rem;border-top:1px solid var(--border);">
+  <div class="two-col-cta" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:4rem;align-items:center;">
+    <div>
+      <div class="sec-tag">Top Players</div>
+      <h2 class="sec-title" style="margin-bottom:1.2rem;">Global <em>Leaderboard</em></h2>
+      <p style="font-family:var(--font-b);font-size:.84rem;color:var(--muted);margin-bottom:1.5rem;line-height:1.75;">Real-time rankings updated after every confirmed match. Where do you stand?</p>
+      <div class="lb-preview" id="lb-preview">
+        <div style="color:var(--muted);font-size:.82rem;">Loading...</div>
+      </div>
+      <a href="leaderboard.html" style="display:inline-block;margin-top:1.2rem;" class="btn-ghost">Full Leaderboard →</a>
+    </div>
+    <div class="cta-section" style="padding:3rem 2rem;border-top:none;border:1px solid rgba(181,245,0,.12);">
+      <div class="cta-glow"></div>
+      <div class="cta-title">Ready to <em>Play?</em></div>
+      <p class="cta-sub">Join thousands of players competing right now. Registration is free, takes 30 seconds.</p>
+      <div class="cta-btns">
+        <a href="register.html" class="btn-lime" id="cta-bottom">Create Free Account →</a>
+        <a href="tournaments.html" class="btn-ghost">Browse Tournaments</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+
+<script>
+const avColors = ['rgba(255,78,0,.1)','rgba(0,217,245,.1)','rgba(181,245,0,.08)','rgba(245,166,35,.1)','rgba(181,100,255,.1)'];
+const avTColors = ['#ff4e00','#00d9f5','#b5f500','#f5a623','#b564ff'];
+const esc = value => KickoffUI.escapeHtml(value);
+
+function gameImageFallback(img) {
+  img.onerror = null;
+  img.src = "assets/supported_games/eFootball.jpg";
+}
+
+// Session check — update nav if logged in
+(async () => {
+  try {
+    const res  = await fetch('api/users/session.php');
+    const data = await res.json();
+    if (data.logged_in) {
+      document.getElementById('cta-main').textContent   = 'Go to Dashboard';
+      document.getElementById('cta-main').href          = 'dashboard.html';
+      document.getElementById('cta-bottom').textContent = 'Go to Dashboard';
+      document.getElementById('cta-bottom').href        = 'dashboard.html';
+    }
+  } catch {}
+})();
+
+// Load supported games
+(async () => {
+  try {
+    const res = await fetch('api/users/catalog.php');
+    const data = await res.json();
+    const grid = document.getElementById('supported-games-grid');
+    const games = data.games || [];
+    if (!games.length) {
+      grid.innerHTML = '<div style="color:var(--muted);font-size:.84rem;">Supported games will appear here soon.</div>';
+      return;
+    }
+    grid.innerHTML = games.map(game => `
+      <article class="supported-game-card">
+        <div class="supported-game-media">
+          <img src="${esc(game.image_path || 'assets/supported_games/eFootball.jpg')}" alt="${esc(game.name)}" onerror="gameImageFallback(this)">
+        </div>
+        <div class="supported-game-name">${esc(game.name)}</div>
+      </article>
+    `).join('');
+  } catch {
+    document.getElementById('supported-games-grid').innerHTML = '<div style="color:var(--muted);font-size:.84rem;">Could not load supported games.</div>';
+  }
+})();
+
+// Load live/open tournaments
+(async () => {
+  try {
+    const res  = await fetch('api/tournaments/list.php?status=open&limit=6');
+    const data = await res.json();
+    const grid = document.getElementById('live-grid');
+
+    // Also grab active ones
+    const res2  = await fetch('api/tournaments/list.php?status=active&limit=3');
+    const data2 = await res2.json();
+
+    const all = [...(data2.tournaments||[]), ...(data.tournaments||[])].slice(0, 6);
+
+    if (!all.length) { grid.innerHTML = '<div style="padding:2rem;color:var(--muted);font-size:.84rem;">No tournaments found. <a href="create_tournament.html" style="color:var(--lime);">Create the first one →</a></div>'; return; }
+
+    grid.innerHTML = all.map(t => KickoffTournamentCard.render(t, { variant: "compact", authenticated: false })).join('');
+
+    // Update hero stats
+    document.getElementById('stat-tournaments').textContent = all.filter(t=>t.status==='active').length || data.pagination?.total || '–';
+  } catch { document.getElementById('live-grid').innerHTML = '<div style="padding:2rem;color:var(--muted);">Could not load tournaments.</div>'; }
+})();
+
+// Load leaderboard preview
+(async () => {
+  try {
+    const res  = await fetch('api/users/leaderboard.php?limit=5');
+    const data = await res.json();
+    const el   = document.getElementById('lb-preview');
+    if (!data.success || !data.players.length) { el.innerHTML = '<div style="color:var(--muted);font-size:.82rem;">No players ranked yet.</div>'; return; }
+
+    const rowClass = ['gold','silver','bronze','',''];
+    el.innerHTML = data.players.slice(0,5).map((p,i) => `
+      <div class="lb-row ${rowClass[i]}">
+        <div class="lb-rank">${p.global_rank}</div>
+        <div class="lb-av" style="background:${avColors[i]};color:${avTColors[i]};">${esc(p.username).substring(0,2).toUpperCase()}</div>
+        <div class="lb-name">${esc(p.username)}</div>
+        <div style="font-family:var(--font-b);font-size:.72rem;color:var(--muted);margin-right:.8rem;">${esc(p.country||'–')}</div>
+        <div class="lb-pts">${p.points.toLocaleString()}</div>
+      </div>`).join('');
+
+    // Hero stat
+    document.getElementById('stat-players').textContent = (data.pagination?.total || 0).toLocaleString();
+  } catch {}
+})();
+
+// Matches stat — use leaderboard total_matches sum (approx)
+document.getElementById('stat-matches').textContent = '–';
+</script>
+</div>
+</body>
+</html>

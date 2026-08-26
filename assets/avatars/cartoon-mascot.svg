@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Cartoon mascot avatar">
+  <rect width="256" height="256" rx="48" fill="#082f49"/><path d="M53 93L30 45l55 18m118 30 23-48-55 18" fill="#00d9f5" stroke="#07131c" stroke-width="7"/>
+  <path d="M42 112q0-78 86-78t86 78q0 80-86 103-86-23-86-103z" fill="#0891b2" stroke="#07131c" stroke-width="7"/>
+  <ellipse cx="95" cy="109" rx="16" ry="22" fill="#fff"/><ellipse cx="161" cy="109" rx="16" ry="22" fill="#fff"/><circle cx="99" cy="114" r="8"/><circle cx="157" cy="114" r="8"/>
+  <path d="M93 159q35 24 70 0" fill="#07131c" stroke="#07131c" stroke-width="8" stroke-linecap="round"/><path d="M111 164h34" stroke="#fff" stroke-width="7"/>
+</svg>

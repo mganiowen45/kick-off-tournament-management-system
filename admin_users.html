@@ -1,0 +1,184 @@
+<?php require_once __DIR__ . '/includes/page_guard.php'; requireAdminPage(); ?>
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manage Users — KICKOFF Admin</title>
+<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="assets/css/page-overrides.css">
+
+<script src="assets/js/kickoff-ui.js"></script>
+<script src="includes/nav.js" data-page="admin_users" data-layout="admin"></script>
+</head>
+<body>
+
+<div class="admin-banner">⚠ Administrator Panel — User Management</div>
+<div id="page-main">
+    <div class="sec-tag">Account Management</div>
+    <h1 class="sec-title" style="margin-bottom:1.5rem;">Manage <em>Users</em></h1>
+    <div class="stats-row" id="user-stats" style="margin-bottom:1.5rem;">
+      <div class="stat-card"><span class="stat-num" id="s-total">–</span><span class="stat-label">Total Users</span></div>
+      <div class="stat-card"><span class="stat-num" id="s-active">–</span><span class="stat-label">Active</span></div>
+      <div class="stat-card"><span class="stat-num" id="s-banned" style="color:var(--fire);">–</span><span class="stat-label">Banned</span></div>
+      <div class="stat-card"><span class="stat-num" id="s-new">–</span><span class="stat-label">New Today</span></div>
+    </div>
+    <div class="filters-bar">
+      <button class="filter-btn active" onclick="setFilter(this,'')">All Users</button>
+      <button class="filter-btn" onclick="setFilter(this,'active')">Active</button>
+      <button class="filter-btn" onclick="setFilter(this,'warned')">Warned</button>
+      <button class="filter-btn" onclick="setFilter(this,'banned')">Banned</button>
+      <div class="search-wrap"><input type="text" id="user-search" placeholder="Search username, country..." oninput="debounceSearch(this.value)"></div>
+    </div>
+    <table class="user-table">
+      <thead><tr><th>Player</th><th>Country</th><th>Game</th><th>Points</th><th>Matches</th><th>Joined</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody id="user-tbody"><tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--muted);">Loading...</td></tr></tbody>
+    </table>
+    <div id="user-pagination" style="display:flex;gap:6px;margin-top:1.2rem;"></div>
+  </div>
+</div>
+
+<!-- User Modal -->
+<div class="modal-backdrop" id="user-modal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Player Profile</div>
+      <button class="modal-close" onclick="document.getElementById('user-modal').classList.remove('open')">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+
+<script>
+let currentFilter = '';
+let currentSearch = '';
+let currentPage   = 1;
+let searchTimer;
+let usersData     = [];
+
+async function init() {
+  const sRes  = await fetch('api/users/session.php');
+  const sData = await sRes.json();
+  if (!sData.logged_in || sData.user.role !== 'admin') { window.location.href = sData.logged_in ? 'dashboard.html' : 'login.html'; return; }
+
+  // Load stats
+  const statsRes  = await fetch('api/admin/stats.php');
+  const statsData = await statsRes.json();
+  if (statsData.success) {
+    document.getElementById('s-total').textContent  = statsData.totalUsers.toLocaleString();
+    document.getElementById('s-active').textContent = (statsData.totalUsers - statsData.bannedUsers).toLocaleString();
+    document.getElementById('s-banned').textContent = statsData.bannedUsers;
+    document.getElementById('s-new').textContent    = statsData.newUsersToday;
+  }
+
+  loadUsers();
+}
+
+function setFilter(btn, status) {
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  currentFilter = status; currentPage = 1; loadUsers();
+}
+
+function debounceSearch(val) {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { currentSearch = val; currentPage = 1; loadUsers(); }, 400);
+}
+
+async function loadUsers() {
+  const params = new URLSearchParams({ page: currentPage, limit: 20 });
+  if (currentFilter) params.set('status', currentFilter);
+  if (currentSearch) params.set('search', currentSearch);
+
+  const res  = await fetch('api/admin/users_list.php?' + params);
+  const data = await res.json();
+  if (!data.success) return;
+  usersData = data.users;
+
+  const statusBadge = {
+    active:  '<span class="badge badge-live">Active</span>',
+    warned:  '<span class="badge" style="color:#f5a623;border-color:rgba(245,166,35,.3);">Warned</span>',
+    banned:  '<span class="badge badge-loss">Banned</span>',
+  };
+
+  document.getElementById('user-tbody').innerHTML = data.users.map(u => `
+    <tr id="row-${u.id}" class="${u.status==='banned'?'banned':''}">
+      <td><div class="u-cell"><div class="u-av">${u.username.substring(0,2).toUpperCase()}</div><div><div class="u-name">${u.username}</div><div class="u-email">${u.email||''}</div></div></div></td>
+      <td>${u.country||'–'}</td>
+      <td style="font-size:.78rem;color:var(--muted);">${u.preferred_game||'–'}</td>
+      <td><span class="pts">${u.points.toLocaleString()}</span></td>
+      <td>${u.total_matches}</td>
+      <td style="font-size:.78rem;color:var(--muted);">${new Date(u.created_at).toLocaleDateString('en',{month:'short',day:'numeric',year:'2-digit'})}</td>
+      <td id="status-${u.id}">${statusBadge[u.status]||u.status}</td>
+      <td>
+        <button class="tbl-btn tbl-btn-view" onclick="openUserModal(${u.id})">View</button>
+        ${u.status !== 'banned'
+          ? `<button class="tbl-btn tbl-btn-warn" onclick="modUser(${u.id},'warn')">Warn</button>
+             <button class="tbl-btn tbl-btn-ban" onclick="modUser(${u.id},'ban')">Ban</button>`
+          : `<button class="tbl-btn tbl-btn-unban" onclick="modUser(${u.id},'unban')">Unban</button>`}
+      </td>
+    </tr>`).join('');
+
+  // Pagination
+  const pg   = data.pagination;
+  const pdiv = document.getElementById('user-pagination');
+  pdiv.innerHTML = '';
+  for (let i=1; i<=Math.min(pg.total_pages,10); i++) {
+    const btn = document.createElement('button');
+    btn.textContent = i; btn.className = 'pg-btn'+(i===currentPage?' active':'');
+    btn.onclick = () => { currentPage=i; loadUsers(); };
+    pdiv.appendChild(btn);
+  }
+}
+
+async function modUser(uid, action) {
+  const ok = await KickoffUI.confirm({
+    title: `${action.charAt(0).toUpperCase()+action.slice(1)} User`,
+    message: `${action.charAt(0).toUpperCase()+action.slice(1)} this user?`,
+    okText: action.charAt(0).toUpperCase()+action.slice(1),
+    danger: action === 'ban'
+  });
+  if (!ok) return;
+  const res  = await fetch('api/admin/ban_user.php', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body: JSON.stringify({ user_id: uid, action }) });
+  const data = await res.json();
+  if (data.success) {
+    const statusBadge = { active:'<span class="badge badge-live">Active</span>', warned:'<span class="badge" style="color:#f5a623;border-color:rgba(245,166,35,.3);">Warned</span>', banned:'<span class="badge badge-loss">Banned</span>' };
+    document.getElementById('status-'+uid).innerHTML = statusBadge[data.new_status] || data.new_status;
+    const row = document.getElementById('row-'+uid);
+    if (data.new_status === 'banned') row.classList.add('banned'); else row.classList.remove('banned');
+    // Refresh action buttons
+    loadUsers();
+  } else { KickoffUI.toast(data.error||'Action failed', 'error'); }
+}
+
+function openUserModal(uid) {
+  const u = usersData.find(x=>x.id==uid);
+  if (!u) return;
+  document.getElementById('modal-title').textContent = u.username;
+  document.getElementById('modal-body').innerHTML = `
+    <div class="info-row"><span>Username</span><span>${u.username}</span></div>
+    <div class="info-row"><span>Email</span><span>${u.email||'–'}</span></div>
+    <div class="info-row"><span>Country</span><span>${u.country||'–'}</span></div>
+    <div class="info-row"><span>Game</span><span>${u.preferred_game||'–'}</span></div>
+    <div class="info-row"><span>Points</span><span style="color:var(--lime);">${u.points.toLocaleString()}</span></div>
+    <div class="info-row"><span>Matches Played</span><span>${u.total_matches}</span></div>
+    <div class="info-row"><span>Wins</span><span>${u.wins}</span></div>
+    <div class="info-row"><span>Status</span><span style="color:${u.status==='banned'?'var(--fire)':u.status==='warned'?'#f5a623':'var(--lime)'};">${u.status}</span></div>
+    <div class="info-row"><span>Joined</span><span>${new Date(u.created_at).toLocaleDateString('en',{year:'numeric',month:'long',day:'numeric'})}</span></div>
+    <div class="info-row"><span>Last Login</span><span>${u.last_login ? new Date(u.last_login).toLocaleDateString() : 'Never'}</span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:1.2rem;padding-top:1rem;border-top:1px solid var(--border);">
+      ${u.status!=='banned'
+        ?`<button class="tbl-btn tbl-btn-warn" style="padding:8px 14px;" onclick="modUser(${u.id},'warn');document.getElementById('user-modal').classList.remove('open')">Issue Warning</button>
+          <button class="tbl-btn tbl-btn-ban" style="padding:8px 14px;" onclick="modUser(${u.id},'ban');document.getElementById('user-modal').classList.remove('open')">Ban Account</button>`
+        :`<button class="tbl-btn tbl-btn-unban" style="padding:8px 14px;" onclick="modUser(${u.id},'unban');document.getElementById('user-modal').classList.remove('open')">Unban Account</button>`}
+      <a href="profile.html?id=${u.id}" target="_blank" class="tbl-btn tbl-btn-view" style="padding:8px 14px;text-decoration:none;">View Profile</a>
+    </div>`;
+  document.getElementById('user-modal').classList.add('open');
+}
+
+function closeModal(e) { document.getElementById('user-modal').classList.remove('open'); }
+
+init();
+</script>
+</body>
+</html>

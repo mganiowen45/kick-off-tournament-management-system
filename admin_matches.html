@@ -1,0 +1,57 @@
+<?php require_once __DIR__ . '/includes/page_guard.php'; requireAdminPage(); ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Matches & Results - KICKOFF Admin</title>
+<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="assets/css/page-overrides.css">
+<script src="assets/js/kickoff-ui.js"></script>
+<script src="includes/nav.js" data-page="admin_matches" data-layout="admin"></script>
+</head>
+<body>
+<div id="page-main">
+  <div class="sec-tag">Competition</div>
+  <h1 class="sec-title">Matches &amp; <em>Results</em></h1>
+  <section class="section-panel">
+    <div class="panel-header">
+      <h2 class="panel-title">Recent Match Activity</h2>
+      <a class="panel-link" href="admin_disputes.html">Disputes</a>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Tournament</th><th>Match</th><th>Stage</th><th>Status</th><th>Score</th><th>Scheduled</th></tr></thead>
+        <tbody id="match-rows"><tr><td colspan="6"><div class="empty-state" style="min-height:90px;">Loading matches...</div></td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+<script>
+const esc = value => KickoffUI.escapeHtml(value);
+function badge(status) {
+  const cls = status === "confirmed" ? "badge-win" : status === "disputed" ? "badge-loss" : "badge-soon";
+  return `<span class="badge ${cls}">${esc(status || "-")}</span>`;
+}
+async function load() {
+  try {
+    const res = await fetch("api/admin/matches.php", { credentials: "same-origin" });
+    const data = await res.json();
+    const rows = data.matches || [];
+    document.getElementById("match-rows").innerHTML = rows.length ? rows.map(m => `
+      <tr>
+        <td>${esc(m.tournament_name)}</td>
+        <td>${esc(m.player1_username)} vs ${esc(m.player2_username)}</td>
+        <td>${esc(m.stage)} / ${Number(m.round_number || 1)}</td>
+        <td>${badge(m.status)}</td>
+        <td>${m.player1_score === null ? "-" : `${Number(m.player1_score)} - ${Number(m.player2_score)}`}</td>
+        <td>${esc(m.scheduled_at || "-")}</td>
+      </tr>`).join("") : `<tr><td colspan="6"><div class="empty-state" style="min-height:90px;">No matches yet.</div></td></tr>`;
+  } catch (error) {
+    document.getElementById("match-rows").innerHTML = `<tr><td colspan="6"><div class="alert alert-error" style="display:block;">Could not load matches.</div></td></tr>`;
+  }
+}
+load();
+</script>
+</body>
+</html>

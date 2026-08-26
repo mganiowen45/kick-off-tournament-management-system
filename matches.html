@@ -1,0 +1,43 @@
+<?php require_once __DIR__ . '/includes/page_guard.php'; requirePlayerPage(); ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Matches - KICKOFF</title>
+<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="assets/css/page-overrides.css">
+<script src="assets/js/kickoff-ui.js"></script>
+<script src="includes/nav.js" data-page="matches" data-layout="app"></script>
+</head>
+<body>
+<div id="page-main">
+  <div class="sec-tag">Player Hub</div>
+  <h1 class="sec-title">My <em>Matches</em></h1>
+  <section class="section-panel"><div id="match-list">Loading matches...</div></section>
+</div>
+<script>
+const esc = value => KickoffUI.escapeHtml(value);
+async function load() {
+  const session = await (await fetch("api/users/session.php", { credentials: "same-origin" })).json();
+  const uid = Number(session.user && session.user.id);
+  const list = await (await fetch("api/tournaments/list.php?limit=100&mine=1", { credentials: "same-origin" })).json();
+  const tournaments = (list.tournaments || []).filter(t => t.joined === true || Number(t.creator_id) === uid);
+  const details = await Promise.all(tournaments.map(t => fetch(`api/tournaments/get.php?id=${Number(t.id)}`, { credentials: "same-origin" }).then(r => r.json()).catch(() => null)));
+  const matches = [];
+  details.forEach(d => (d && d.matches || []).forEach(m => {
+    if (Number(m.player1_id) === uid || Number(m.player2_id) === uid) matches.push(Object.assign({}, m, { tournament: d.tournament }));
+  }));
+  document.getElementById("match-list").innerHTML = matches.length ? matches.map(m => `<div class="match-row">
+    <div class="mr-players"><span>${esc(m.player1_name)}</span><span class="mr-vs">VS</span><span>${esc(m.player2_name)}</span></div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+      <span class="badge badge-soon">${esc(m.status)}</span>
+      <a class="btn-ghost" href="tournament_detail.html?id=${Number(m.tournament_id)}">Tournament</a>
+      ${["scheduled","pending_result","disputed"].includes(m.status) ? `<a class="btn-lime" href="submit_result.html?match_id=${Number(m.id)}">Submit Result</a>` : ""}
+    </div>
+  </div>`).join("") : `<div class="empty-state" style="min-height:90px;"><p>No matches assigned yet.</p></div>`;
+}
+load();
+</script>
+</body>
+</html>

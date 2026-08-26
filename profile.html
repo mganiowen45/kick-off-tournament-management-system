@@ -1,0 +1,183 @@
+<?php require_once __DIR__ . '/includes/page_guard.php'; requirePlayerPage(); ?>
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Profile — KICKOFF</title>
+<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="assets/css/page-overrides.css">
+
+<script src="assets/js/kickoff-ui.js"></script>
+<script src="includes/nav.js" data-page="profile" data-layout="app"></script>
+</head>
+<body>
+<div id="page-main">
+<div style="position:relative;z-index:1;" id="page-body">
+  <div style="padding:3rem;text-align:center;color:var(--muted);">Loading profile...</div>
+</div>
+
+<script>
+const params      = new URLSearchParams(location.search);
+let profileId     = params.get('id');
+let currentUser   = null;
+let isOwnProfile  = false;
+const esc = value => (window.KickoffUI && window.KickoffUI.escapeHtml ? window.KickoffUI.escapeHtml(value) : String(value ?? ''));
+
+function timeAgo(dt) {
+  if (!dt) return '';
+  const diff = Math.floor((Date.now()-new Date(dt))/1000);
+  if (diff<60) return 'just now'; if (diff<3600) return Math.floor(diff/60)+'m ago';
+  if (diff<86400) return Math.floor(diff/3600)+'h ago'; return Math.floor(diff/86400)+'d ago';
+}
+
+async function load() {
+  const sRes  = await fetch('api/users/session.php');
+  const sData = await sRes.json();
+  if (!sData.logged_in) { window.location.href = 'login.html'; return; }
+  currentUser = sData.user;
+  if (!profileId) profileId = currentUser.id;
+  isOwnProfile = profileId == currentUser.id;
+
+  const res  = await fetch(`api/users/profile.php?id=${profileId}`);
+  const data = await res.json();
+  if (!data.success) { document.getElementById('page-body').innerHTML = '<div style="padding:3rem;text-align:center;color:var(--fire);">User not found.</div>'; return; }
+
+  const u = data.user;
+  const wr = u.win_rate || 0;
+
+  document.title = `${u.username} — KICKOFF`;
+  document.getElementById('page-body').innerHTML = `
+    <div class="profile-header">
+      <div class="p-avatar"><img src="${esc(u.avatar_url)}" alt=""></div>
+      <div>
+        <div class="p-name">${u.username}</div>
+        <div class="p-country">🌍 ${u.country||'Unknown'} &nbsp;·&nbsp; Member since ${new Date(u.created_at).toLocaleDateString('en',{month:'long',year:'numeric'})}</div>
+        <div class="p-badges">
+          <span class="badge badge-live">Verified Player</span>
+          ${u.wins >= 10 ? '<span class="badge badge-win">10+ Wins</span>' : ''}
+        </div>
+      </div>
+      <div class="p-stats">
+        <div class="ps-item"><span class="ps-val">${u.total_matches}</span><span class="ps-lbl">Matches</span></div>
+        <div class="ps-item"><span class="ps-val">${u.wins}</span><span class="ps-lbl">Wins</span></div>
+        <div class="ps-item"><span class="ps-val">${wr}%</span><span class="ps-lbl">Win Rate</span></div>
+        <div class="ps-item"><span class="ps-val">${u.points.toLocaleString()}</span><span class="ps-lbl">Points</span></div>
+      </div>
+    </div>
+
+    <div class="tab-nav">
+      <button class="tab-btn active" onclick="switchTab(this,'history')">Match History</button>
+      <button class="tab-btn" onclick="switchTab(this,'tournaments')">Tournaments</button>
+      ${isOwnProfile ? '<button class="tab-btn" onclick="switchTab(this,\'settings\')">Settings</button>' : ''}
+    </div>
+
+    <div class="tab-pane active" id="tab-history">
+      ${data.matchHistory.length ? data.matchHistory.map(m => `
+        <div class="history-row">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div class="hr-result ${m.result[0]}">${m.result[0].toUpperCase()}</div>
+            <div><div class="hr-opp">vs ${m.opponent}</div><div class="hr-tour">${m.tournament_name} · ${timeAgo(m.played_at)}</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-family:var(--font-d);font-size:.9rem;color:${m.result==='win'?'var(--lime)':m.result==='loss'?'var(--fire)':'var(--cyan)'};">${m.player1_score}–${m.player2_score}</span>
+            <span class="badge badge-${m.result}">${m.result.charAt(0).toUpperCase()+m.result.slice(1)}</span>
+          </div>
+        </div>`).join('')
+        : '<div style="color:var(--muted);padding:.5rem 0;">No match history yet.</div>'}
+    </div>
+
+    <div class="tab-pane" id="tab-tournaments">
+      ${data.tournaments.length ? data.tournaments.map(t => `
+        <div class="history-row" onclick="location.href='tournament_detail.html?id=${t.id}'" style="cursor:pointer;">
+          <div><div class="hr-opp">${t.name}</div><div class="hr-tour">${t.format} · ${t.status}</div></div>
+          <span class="badge badge-${t.status==='active'?'live':t.status==='open'?'open':'soon'}">${t.status}</span>
+        </div>`).join('')
+        : '<div style="color:var(--muted);padding:.5rem 0;">No tournaments yet.</div>'}
+    </div>
+
+    ${isOwnProfile ? `
+      <div class="tab-pane" id="tab-settings">
+      <div style="max-width:560px;">
+        <div class="card" style="margin-bottom:1.5rem;">
+          <div class="card-title">Account Settings</div>
+          <div class="alert-success" id="settings-success"></div>
+          <div class="alert-error form-error-summary" id="settings-error" data-form-error hidden></div>
+          <div id="settings-form" data-error-target="settings-error">
+          <div class="form-group"><label class="form-label">Username</label><input type="text" class="form-input" id="s-username" value="${u.username}"></div>
+          <div class="form-group"><label class="form-label">Email</label><input type="email" class="form-input" id="s-email" value="${u.email||''}"></div>
+          <div class="form-group"><label class="form-label">Country</label>
+            <select class="form-select form-input" id="s-country">
+              ${['Tanzania','Kenya','Uganda','Rwanda','Ethiopia','Nigeria','Ghana','South Africa','Other'].map(c=>`<option${c===u.country?' selected':''}>${c}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label">Theme</label>
+            <select class="form-select form-input" id="s-theme">
+              ${['esport','light','midnight'].map(th=>`<option value="${th}"${th===(u.theme_preference||'esport')?' selected':''}>${th.charAt(0).toUpperCase()+th.slice(1)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label">Timezone</label><input type="text" class="form-input" id="s-timezone" value="${u.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone||'Africa/Dar_es_Salaam'}"></div>
+          <div class="form-group"><label class="form-label">WhatsApp Number</label><input type="tel" class="form-input" id="s-whatsapp" placeholder="+255712345678" value="${u.whatsapp_number||''}"></div>
+          <div class="form-group"><label class="form-label">Country Calling Code</label><input type="text" class="form-input" id="s-whatsapp-code" placeholder="+255" value="${u.whatsapp_country_code||''}"></div>
+          <label class="form-group" style="display:flex;align-items:flex-start;gap:.65rem;color:var(--muted);font-size:.84rem;">
+            <input type="checkbox" id="s-whatsapp-optin" ${Number(u.whatsapp_contact_opt_in||0)===1?'checked':''} style="margin-top:.25rem;">
+            <span>Allow assigned tournament opponents to contact me on WhatsApp for match coordination.</span>
+          </label>
+          <div class="form-group"><label class="form-label">Current Password</label><input type="password" class="form-input" id="s-current-password" placeholder="Required only when changing password"></div>
+          <div class="form-group"><label class="form-label">New Password (leave blank to keep current)</label><input type="password" class="form-input" id="s-password" placeholder="New password..."></div>
+          <button class="btn-lime" onclick="saveSettings()">Save Changes</button>
+          </div>
+        </div>
+      </div>
+    </div>` : ''}
+  `;
+}
+
+function switchTab(btn, id) {
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-'+id).classList.add('active');
+}
+
+async function saveSettings() {
+  const body = {};
+  const un = document.getElementById('s-username')?.value;
+  const em = document.getElementById('s-email')?.value;
+  const cn = document.getElementById('s-country')?.value;
+  const tz = document.getElementById('s-timezone')?.value;
+  const th = document.getElementById('s-theme')?.value;
+  const wa = document.getElementById('s-whatsapp')?.value;
+  const wc = document.getElementById('s-whatsapp-code')?.value;
+  const wo = document.getElementById('s-whatsapp-optin')?.checked;
+  const cp = document.getElementById('s-current-password')?.value;
+  const pw = document.getElementById('s-password')?.value;
+  if (un) body.username = un; if (em) body.email = em;
+  if (cn) body.country = cn;
+  if (th) body.theme_preference = th;
+  if (tz) body.timezone = tz;
+  body.whatsapp_number = wa || '';
+  body.whatsapp_country_code = wc || '';
+  body.whatsapp_contact_opt_in = wo ? 1 : 0;
+  if (pw) { body.password = pw; body.current_password = cp || ''; }
+
+  const suc  = document.getElementById('settings-success');
+  const err  = document.getElementById('settings-error');
+  const form = document.getElementById('settings-form');
+  suc.style.display = 'none'; KickoffUI.hideFormError(form, { errorId: 'settings-error' });
+  let data;
+  try {
+    const res  = await fetch('api/users/update.php', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body: JSON.stringify(body) });
+    data = await res.json();
+  } catch {
+    KickoffUI.showFormError(form, 'Network error. Please check your connection and try again.', { errorId: 'settings-error', title: 'Profile could not be saved' });
+    return;
+  }
+  if (data.success) { if (th && window.KickoffUI) KickoffUI.setTheme(th); suc.textContent = 'Profile updated successfully!'; suc.style.display = 'block'; }
+  else { KickoffUI.showFormError(form, data.error || 'Update failed.', { errorId: 'settings-error', title: 'Profile could not be saved' }); }
+}
+
+load();
+</script>
+</div>
+</body>
+</html>

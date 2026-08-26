@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tournaments - KICKOFF</title>
+<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="assets/css/page-overrides.css">
+<link rel="stylesheet" href="assets/css/tournament-cards.css">
+<script src="assets/js/kickoff-ui.js"></script>
+<script src="assets/js/tournament-card.js"></script>
+<script src="includes/nav.js" data-page="tournaments" data-layout="adaptive"></script>
+</head>
+<body>
+<div id="page-main">
+  <div class="sec-tag">All Competitions</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1.5rem;">
+    <h1 class="sec-title" style="margin:0;">Browse <em>Tournaments</em></h1>
+    <a href="create_tournament.html" class="btn-lime" id="create-tournament-link"><i class="fa-solid fa-plus"></i>Create Tournament</a>
+  </div>
+
+  <div class="filters">
+    <button class="filter-btn active" onclick="setFilter(this,'format','')">All</button>
+    <button class="filter-btn" onclick="setFilter(this,'format','1v1')">1V1</button>
+    <button class="filter-btn" onclick="setFilter(this,'format','full_knockout')">Full Knockout</button>
+    <button class="filter-btn" onclick="setFilter(this,'format','group_knockout')">Group + Knockout</button>
+    <button class="filter-btn" id="btn-open" onclick="toggleStatus(this,'open')">Open</button>
+    <button class="filter-btn" id="btn-live" onclick="toggleStatus(this,'active')">Live</button>
+    <button class="filter-btn" id="btn-completed" onclick="toggleStatus(this,'completed')">Completed</button>
+    <button class="filter-btn" id="btn-free" onclick="togglePayment(this,'free')">Free</button>
+    <button class="filter-btn" id="btn-paid" onclick="togglePayment(this,'paid')">Paid</button>
+    <button class="filter-btn" id="btn-slots" onclick="toggleSlots(this)">Slots</button>
+    <select class="form-select form-input" id="filter-game" style="max-width:180px;" onchange="setSelectFilter('game_id',this.value)"></select>
+    <select class="form-select form-input" id="filter-platform" style="max-width:160px;" onchange="setSelectFilter('platform_id',this.value)"></select>
+    <div class="search-box">
+      <input type="text" id="search-input" placeholder="Search tournaments..." oninput="debounceSearch(this.value)">
+    </div>
+  </div>
+
+  <div class="t-grid" id="t-grid">
+    <div class="empty-state"><p>Loading tournaments...</p></div>
+  </div>
+  <div id="pagination" style="display:flex;gap:6px;margin-top:1.2rem;"></div>
+</div>
+
+<script>
+let currentUser = null;
+let filters = { format: "", status: "", search: "", page: 1, game_id: "", platform_id: "", payment: "", available_slots: "" };
+let searchTimer;
+const esc = value => KickoffUI.escapeHtml(value);
+document.getElementById("create-tournament-link").addEventListener("click", event => {
+  if (currentUser) return;
+  event.preventDefault();
+  location.href = "login.html?return_to=" + encodeURIComponent("create_tournament.html");
+});
+
+(async () => {
+  try {
+    const [sessionRes, catalogRes] = await Promise.all([
+      fetch("api/users/session.php", { credentials: "same-origin" }),
+      fetch("api/users/catalog.php", { credentials: "same-origin" })
+    ]);
+    const session = await sessionRes.json();
+    if (session.logged_in) currentUser = session.user;
+    const catalog = await catalogRes.json();
+    document.getElementById("filter-game").innerHTML = `<option value="">All Games</option>` + (catalog.games || []).map(g => `<option value="${Number(g.id)}">${esc(g.name)}</option>`).join("");
+    document.getElementById("filter-platform").innerHTML = `<option value="">All Platforms</option>` + (catalog.platforms || []).map(p => `<option value="${Number(p.id)}">${esc(p.name)}</option>`).join("");
+  } catch (error) {}
+  loadTournaments();
+})();
+
+function setFilter(btn, key, val) {
+  document.querySelectorAll(".filters .filter-btn").forEach(b => {
+    if (!["btn-live", "btn-open", "btn-completed", "btn-free", "btn-paid", "btn-slots"].includes(b.id)) b.classList.remove("active");
+  });
+  btn.classList.add("active");
+  filters[key] = val;
+  filters.page = 1;
+  loadTournaments();
+}
+
+function toggleStatus(btn, status) {
+  if (filters.status === status) {
+    filters.status = "";
+    btn.classList.remove("active");
+  } else {
+    ["btn-live", "btn-open", "btn-completed"].forEach(id => document.getElementById(id).classList.remove("active"));
+    filters.status = status;
+    btn.classList.add("active");
+  }
+  filters.page = 1;
+  loadTournaments();
+}
+
+function togglePayment(btn, payment) {
+  if (filters.payment === payment) {
+    filters.payment = "";
+    btn.classList.remove("active");
+  } else {
+    ["btn-free", "btn-paid"].forEach(id => document.getElementById(id).classList.remove("active"));
+    filters.payment = payment;
+    btn.classList.add("active");
+  }
+  filters.page = 1;
+  loadTournaments();
+}
+
+function toggleSlots(btn) {
+  filters.available_slots = filters.available_slots ? "" : "1";
+  btn.classList.toggle("active", Boolean(filters.available_slots));
+  filters.page = 1;
+  loadTournaments();
+}
+
+function setSelectFilter(key, value) {
+  filters[key] = value;
+  filters.page = 1;
+  loadTournaments();
+}
+
+function debounceSearch(val) {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { filters.search = val; filters.page = 1; loadTournaments(); }, 400);
+}
+
+async function loadTournaments() {
+  const grid = document.getElementById("t-grid");
+  grid.innerHTML = '<div class="empty-state"><p>Loading...</p></div>';
+  const params = new URLSearchParams({ page: filters.page, limit: 12 });
+  Object.entries(filters).forEach(([key, value]) => {
+    if (!["page"].includes(key) && value) params.set(key, value);
+  });
+
+  const res = await fetch("api/tournaments/list.php?" + params, { credentials: "same-origin" });
+  const data = await res.json();
+  if (!data.success || !data.tournaments.length) {
+    grid.innerHTML = '<div class="empty-state"><p>No tournaments found</p></div>';
+    return;
+  }
+
+  grid.innerHTML = data.tournaments.map(t => KickoffTournamentCard.render(t, { authenticated: Boolean(currentUser), currentUser })).join("");
+
+  const pg = data.pagination || {};
+  const pDiv = document.getElementById("pagination");
+  pDiv.innerHTML = "";
+  if ((pg.total_pages || 1) > 1) {
+    for (let i = 1; i <= pg.total_pages; i++) {
+      const btn = document.createElement("button");
+      btn.textContent = i;
+      btn.className = "filter-btn" + (i === pg.page ? " active" : "");
+      btn.onclick = () => { filters.page = i; loadTournaments(); };
+      pDiv.appendChild(btn);
+    }
+  }
+}
+
+async function joinTournament(btn, id) {
+  if (!currentUser) {
+    location.href = "login.html?return_to=" + encodeURIComponent("tournaments.html");
+    return;
+  }
+  await KickoffUI.withButtonLoading(btn, "Checking eligibility...", async () => {
+    btn.innerHTML = `<span class="spinner" style="width:14px;height:14px;"></span>Joining...`;
+    const res = await fetch("api/tournaments/join.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ tournament_id: id })
+    });
+    const data = await res.json();
+    if (data.success && data.payment && data.payment.checkout_url) {
+      location.href = data.payment.checkout_url;
+      return;
+    }
+    if (data.success) {
+      location.href = `tournament_detail.html?id=${id}`;
+      return;
+    }
+    btn.textContent = data.error || "Failed";
+    btn.style.color = "var(--fire)";
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Titan esports avatar">
+  <rect width="256" height="256" rx="48" fill="#170b08"/><path d="M34 84l38-51 56 16 56-16 38 51-25 132-69 25-69-25z" fill="#32140d" stroke="#ff4e00" stroke-width="6"/>
+  <path d="M75 88l53-39 53 39-13 87-40 30-40-30z" fill="#151515"/><path d="M78 101l43 7-17 30-32-17zm100 0-43 7 17 30 32-17z" fill="#ff4e00"/>
+  <path d="M103 159l25 14 25-14-9 29h-32z" fill="#f5a623"/><path d="M128 52v50" stroke="#f5a623" stroke-width="6"/>
+</svg>

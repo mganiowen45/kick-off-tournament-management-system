@@ -1,0 +1,282 @@
+<?php require_once __DIR__ . '/includes/page_guard.php'; requirePlayerPage(); ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Create Tournament - KICKOFF</title>
+<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="assets/css/page-overrides.css">
+<script src="assets/js/kickoff-ui.js"></script>
+<script src="includes/nav.js" data-page="create_tournament" data-layout="app"></script>
+</head>
+<body>
+<div id="page-main">
+  <div class="sec-tag">Organise a Competition</div>
+  <h1 class="sec-title">Create a <em>Tournament</em></h1>
+  <div class="alert-error" id="create-error"></div>
+
+  <form id="create-form" data-error-target="create-error" novalidate>
+    <div class="form-card">
+      <div class="form-card-title">Basic Information</div>
+      <div class="form-group">
+        <label class="form-label" for="t-name">Tournament Name *</label>
+        <input type="text" class="form-input" id="t-name" placeholder="e.g. East Africa Champions Cup" required maxlength="100">
+      </div>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label" for="t-start">Start Date *</label>
+          <input type="date" class="form-input" id="t-start" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="t-deadline">Registration Deadline *</label>
+          <input type="date" class="form-input" id="t-deadline" required>
+        </div>
+      </div>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label" for="t-game">Game *</label>
+          <select class="form-select form-input" id="t-game" required></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="t-platform">Platform *</label>
+          <select class="form-select form-input" id="t-platform" required></select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tournament Cover *</label>
+        <input type="hidden" id="t-cover" required>
+        <div class="cover-gallery" id="cover-gallery"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="t-desc">Description</label>
+        <textarea class="form-textarea form-input" id="t-desc" placeholder="Rules, schedule expectations, evidence requirements, and allowed teams."></textarea>
+      </div>
+    </div>
+
+    <div class="form-card">
+      <div class="form-card-title">Tournament Format</div>
+      <div class="format-grid">
+        <button type="button" class="format-opt selected" onclick="selectFormat(this,'1v1')">
+          <div class="fo-icon">1</div><div class="fo-name">1V1</div>
+          <div class="fo-desc">Two players, true Best-of-3 series</div>
+        </button>
+        <button type="button" class="format-opt" onclick="selectFormat(this,'full_knockout')">
+          <div class="fo-icon">KO</div><div class="fo-name">Full Knockout</div>
+          <div class="fo-desc">Stable single-elimination bracket</div>
+        </button>
+        <button type="button" class="format-opt" onclick="selectFormat(this,'group_knockout')">
+          <div class="fo-icon">G</div><div class="fo-name">Group + Knockout</div>
+          <div class="fo-desc">Groups of four, top two qualify</div>
+        </button>
+      </div>
+      <input type="hidden" id="t-format" value="1v1">
+    </div>
+
+    <div class="form-card">
+      <div class="form-card-title">Capacity &amp; Settings</div>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label" for="t-capacity">Max Players</label>
+          <select class="form-select form-input" id="t-capacity"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="t-visibility">Visibility</label>
+          <select class="form-select form-input" id="t-visibility">
+            <option value="public" selected>Public</option>
+            <option value="private">Private (invite only)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-card">
+      <div class="form-card-title">Funding &amp; Prize Preview</div>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label" for="t-funding">Funding Model</label>
+          <select class="form-select form-input" id="t-funding">
+            <option value="free_casual">Free Casual Tournament</option>
+            <option value="participant_funded">Participant-Funded Tournament</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="t-entry-fee">Entry Fee (TZS)</label>
+          <input type="number" class="form-input" id="t-entry-fee" min="0" step="100" value="0">
+        </div>
+      </div>
+      <div class="alert-info" id="prize-preview" style="display:block;"></div>
+    </div>
+
+    <div style="display:flex;gap:1rem;">
+      <a href="tournaments.html" class="btn-ghost">Cancel</a>
+      <button type="submit" class="btn-lime" style="flex:1;" id="create-btn">Create Tournament</button>
+    </div>
+  </form>
+</div>
+
+<script>
+const today = new Date().toISOString().split("T")[0];
+document.getElementById("t-start").min = today;
+document.getElementById("t-deadline").min = today;
+const esc = value => KickoffUI.escapeHtml(value);
+
+async function initCatalog() {
+  setCoverGalleryState("loading");
+  try {
+    const res = await fetch("api/users/catalog.php", { credentials: "same-origin" });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || "Could not load tournament catalog.");
+    document.getElementById("t-game").innerHTML = (data.games || []).map(g => `<option value="${Number(g.id)}">${esc(g.name)}</option>`).join("");
+    document.getElementById("t-platform").innerHTML = (data.platforms || []).map(p => `<option value="${Number(p.id)}">${esc(p.name)}</option>`).join("");
+    renderCoverGallery(data.covers || []);
+  } catch (error) {
+    setCoverGalleryState("error", error.message || "Could not load tournament covers.");
+  }
+}
+
+function setCoverGalleryState(state, message) {
+  const field = document.getElementById("t-cover");
+  const gallery = document.getElementById("cover-gallery");
+  field.value = "";
+  if (state === "loading") {
+    gallery.innerHTML = `<div class="cover-gallery-state"><div><div class="spinner" style="margin:0 auto .8rem;"></div><p>Loading cover library...</p></div></div>`;
+    return;
+  }
+  if (state === "empty") {
+    gallery.innerHTML = `<div class="cover-gallery-state"><p>No active tournament covers are available right now.</p><button type="button" class="btn-ghost" onclick="initCatalog()">Retry</button></div>`;
+    return;
+  }
+  gallery.innerHTML = `<div class="cover-gallery-state"><div><p>${esc(message || "Could not load tournament covers.")}</p><button type="button" class="btn-ghost" onclick="initCatalog()">Retry</button></div></div>`;
+}
+
+function renderCoverGallery(covers) {
+  const field = document.getElementById("t-cover");
+  const gallery = document.getElementById("cover-gallery");
+  if (!covers.length) {
+    setCoverGalleryState("empty");
+    return;
+  }
+  gallery.innerHTML = covers.map((c, index) => `<button type="button" class="cover-choice${index === 0 ? " selected" : ""}" data-id="${Number(c.id)}">
+    <img src="${esc(c.file_path)}" alt="">
+    <span>${esc(c.name)}<small>${esc(c.category)}</small></span>
+  </button>`).join("");
+  if (covers[0]) field.value = Number(covers[0].id);
+  gallery.querySelectorAll(".cover-choice").forEach(btn => btn.addEventListener("click", () => {
+    gallery.querySelectorAll(".cover-choice").forEach(item => item.classList.remove("selected"));
+    btn.classList.add("selected");
+    field.value = btn.dataset.id;
+  }));
+}
+
+function selectFormat(el, fmt) {
+  document.querySelectorAll(".format-opt").forEach(o => o.classList.remove("selected"));
+  el.classList.add("selected");
+  document.getElementById("t-format").value = fmt;
+  updateFormatRules();
+  updatePrizePreview();
+}
+
+function updateFormatRules() {
+  const fmt = document.getElementById("t-format").value;
+  const cap = document.getElementById("t-capacity");
+  const options = fmt === "1v1" ? [2] : fmt === "full_knockout" ? [4, 8, 16, 32, 64] : [8, 16, 32];
+  cap.innerHTML = options.map(v => `<option value="${v}">${v}</option>`).join("");
+  cap.value = fmt === "1v1" ? "2" : "16";
+  cap.disabled = fmt === "1v1";
+}
+
+function updatePrizePreview() {
+  const fmt = document.getElementById("t-format").value;
+  const cap = Number(document.getElementById("t-capacity").value || 0);
+  const funding = document.getElementById("t-funding").value;
+  const entry = funding === "participant_funded" ? Number(document.getElementById("t-entry-fee").value || 0) : 0;
+  const pool = funding === "free_casual" ? 0 : Math.max(0, cap * entry * 0.9);
+  const distribution = fmt === "1v1" || cap < 8
+    ? "Winner 100%"
+    : cap < 16 ? "Winner 70% / Runner-up 30%" : "Winner 60% / Runner-up 25% / Semifinalists 7.5% each";
+  document.getElementById("prize-preview").textContent = funding === "free_casual"
+    ? "Free Casual: entry fee is 0 and cash prize is 0."
+    : `Projected prize pool: TZS ${pool.toLocaleString()} - ${distribution}.`;
+}
+
+["t-capacity", "t-funding", "t-entry-fee"].forEach(id => {
+  document.getElementById(id).addEventListener("input", updatePrizePreview);
+  document.getElementById(id).addEventListener("change", updatePrizePreview);
+});
+
+document.getElementById("create-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const btn = document.getElementById("create-btn");
+  KickoffUI.hideFormError(form, { errorId: "create-error" });
+  const required = [
+    ["#t-name", "Please enter a tournament name."],
+    ["#t-start", "Please choose a start date."],
+    ["#t-deadline", "Please choose a registration deadline."],
+    ["#t-game", "Please select a supported game."],
+    ["#t-platform", "Please select a tournament platform."],
+    ["#t-cover", "Please select a tournament cover.", true]
+  ];
+  for (const [selector, message, hiddenField] of required) {
+    const field = document.querySelector(selector);
+    if (!field || !String(field.value || "").trim()) {
+      KickoffUI.showFormError(form, message, { errorId: "create-error", field: hiddenField ? null : selector, focusField: !hiddenField, title: "Tournament needs attention" });
+      return;
+    }
+  }
+  if (document.getElementById("t-funding").value === "participant_funded" && Number(document.getElementById("t-entry-fee").value || 0) <= 0) {
+    KickoffUI.showFormError(form, "Participant-funded tournaments need an entry fee above zero.", { errorId: "create-error", field: "#t-entry-fee", title: "Tournament needs attention" });
+    return;
+  }
+  const body = {
+    name: document.getElementById("t-name").value.trim(),
+    format: document.getElementById("t-format").value,
+    game_id: Number(document.getElementById("t-game").value),
+    platform_id: Number(document.getElementById("t-platform").value),
+    cover_image_id: Number(document.getElementById("t-cover").value),
+    start_date: document.getElementById("t-start").value,
+    registration_deadline: document.getElementById("t-deadline").value,
+    description: document.getElementById("t-desc").value,
+    max_players: Number(document.getElementById("t-capacity").value),
+    visibility: document.getElementById("t-visibility").value,
+    funding_model: document.getElementById("t-funding").value,
+    entry_fee_amount: Number(document.getElementById("t-entry-fee").value || 0)
+  };
+
+  await KickoffUI.withButtonLoading(btn, "Creating tournament...", async () => {
+    try {
+      const res = await fetch("api/tournaments/create.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (!data.success) {
+        KickoffUI.showFormError(form, data.error || "Failed to create tournament.", { errorId: "create-error", title: "Tournament could not be created" });
+        return;
+      }
+      if (body.visibility === "private" && await KickoffUI.confirm({ title: "Private Invite", message: "Tournament created. Copy the private invite link?", okText: "Copy Link" })) {
+        const url = new URL(data.share_url || `tournament_detail.html?id=${data.tournament_id}`, window.location.href).href;
+        if (navigator.clipboard) {
+          await navigator.clipboard.writeText(url);
+          KickoffUI.toast("Private invite link copied.", "success");
+        } else {
+          await KickoffUI.prompt({ title: "Copy Private Invite", message: url, value: url, okText: "Done" });
+        }
+      }
+      window.location.href = `tournament_detail.html?id=${data.tournament_id}`;
+    } catch (error) {
+      KickoffUI.showFormError(form, "Network error. Please check your connection and try again.", { errorId: "create-error", title: "Tournament could not be created" });
+    }
+  });
+});
+
+initCatalog().finally(() => {
+  updateFormatRules();
+  updatePrizePreview();
+});
+</script>
+</body>
+</html>

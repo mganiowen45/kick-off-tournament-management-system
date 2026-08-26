@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" role="img" aria-label="Console night tournament cover">
+  <defs><linearGradient id="night" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#121827"/><stop offset=".6" stop-color="#293044"/><stop offset="1" stop-color="#251a35"/></linearGradient></defs>
+  <rect width="1200" height="675" fill="url(#night)"/>
+  <path d="M220 405 C310 312 890 312 980 405 L1060 548 C1090 605 1048 632 1000 598 L890 520 H310 L200 598 C152 632 110 605 140 548 Z" fill="#111827" stroke="#e7fff3" stroke-width="8"/>
+  <circle cx="405" cy="455" r="58" fill="#182333" stroke="#00d9f5" stroke-width="8"/>
+  <path d="M375 455 H435 M405 425 V485" stroke="#e7fff3" stroke-width="12" stroke-linecap="round"/>
+  <g fill="#b5f500"><circle cx="785" cy="425" r="18"/><circle cx="835" cy="455" r="18"/><circle cx="735" cy="455" r="18"/><circle cx="785" cy="485" r="18"/></g>
+  <rect x="520" y="430" width="160" height="26" rx="13" fill="#ff4e7a" opacity=".9"/>
+  <path d="M300 180 H900" stroke="#b5f500" stroke-width="12" stroke-linecap="round" opacity=".72"/>
+</svg>

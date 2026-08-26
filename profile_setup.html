@@ -1,0 +1,258 @@
+<?php require_once __DIR__ . '/includes/page_guard.php'; requirePlayerOnboardingPage(); ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Complete Player Profile - KICKOFF</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+body.onboarding-body{min-height:100vh;}
+.onboarding-shell{width:min(980px,calc(100% - 2rem));margin:0 auto;padding:2rem 0 3rem;}
+.onboarding-top{display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-bottom:2rem;}
+.onboarding-logo{font-family:var(--font-display);font-size:1.55rem;font-weight:900;letter-spacing:.02em;color:var(--text);text-decoration:none;}
+.onboarding-logo span{color:var(--primary);}
+.onboarding-card{border:1px solid var(--border);background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.025));border-radius:var(--radius);padding:1.4rem;box-shadow:0 24px 70px rgba(0,0,0,.25);}
+.onboarding-heading{text-align:center;margin:0 auto 1.6rem;max-width:680px;}
+.onboarding-heading h1{font-family:var(--font-display);font-size:clamp(2rem,5vw,4rem);line-height:.94;text-transform:uppercase;margin:.35rem 0;}
+.onboarding-heading em{color:var(--primary);font-style:normal;}
+.onboarding-meta{display:flex;align-items:center;justify-content:center;gap:.6rem;flex-wrap:wrap;color:var(--muted);font-family:var(--font-ui);font-size:.8rem;}
+.avatar-tabs{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.8rem;}
+.avatar-tab{min-height:34px;padding:.45rem .75rem;border:1px solid var(--border);background:rgba(255,255,255,.035);color:var(--muted);cursor:pointer;font-family:var(--font-ui);font-size:.68rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;border-radius:4px;}
+.avatar-tab.active,.avatar-tab:hover{color:var(--primary);border-color:rgba(204,255,0,.42);background:rgba(204,255,0,.07);}
+.setup-actions{display:flex;gap:1rem;align-items:center;margin-top:1.2rem;}
+@media (max-width:720px){.onboarding-top{align-items:flex-start}.setup-actions{flex-direction:column}.setup-actions .btn-lime,.setup-actions .btn-ghost{width:100%;justify-content:center}.form-row-2{grid-template-columns:1fr!important;}}
+</style>
+<script src="assets/js/kickoff-ui.js"></script>
+</head>
+<body class="onboarding-body">
+<div class="onboarding-shell">
+  <header class="onboarding-top">
+    <a href="index.html" class="onboarding-logo">KICK<span>OFF</span></a>
+    <button type="button" class="btn-ghost" id="logout-btn"><i class="fa-solid fa-right-from-bracket"></i>Log Out</button>
+  </header>
+
+  <main>
+    <div class="onboarding-heading">
+      <div class="sec-tag">First Login Setup</div>
+      <h1>Complete Your <em>Player Profile</em></h1>
+      <p class="page-kicker">Set up your game identity before competing.</p>
+      <div class="onboarding-meta" id="signed-in-meta">Checking your session...</div>
+    </div>
+
+    <section class="onboarding-card">
+      <div id="setup-error" class="alert-error form-error-summary" data-form-error hidden></div>
+      <form id="setup-form" data-error-target="setup-error" novalidate>
+        <div class="form-row-2" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;">
+          <div class="form-group">
+            <label class="form-label" for="setup-game">Game</label>
+            <select class="form-select form-input" id="setup-game" required></select>
+            <div class="field-error-msg" id="err-setup-game"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="setup-platform">Platform</label>
+            <select class="form-select form-input" id="setup-platform" required></select>
+            <div class="field-error-msg" id="err-setup-platform"></div>
+          </div>
+        </div>
+        <div class="form-row-2" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;">
+          <div class="form-group">
+            <label class="form-label" for="setup-ign">In-game Name</label>
+            <input type="text" class="form-input" id="setup-ign" maxlength="80" required>
+            <div class="field-error-msg" id="err-setup-ign"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="setup-team">Team/Squad</label>
+            <input type="text" class="form-input" id="setup-team" maxlength="80">
+            <div class="field-error-msg" id="err-setup-team"></div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Avatar</label>
+          <div class="avatar-tabs" id="avatar-tabs"></div>
+          <div id="avatar-grid" class="avatar-grid">
+            <div class="skeleton skeleton-card"></div>
+          </div>
+          <div class="field-error-msg" id="err-avatar-grid"></div>
+        </div>
+        <div class="setup-actions">
+          <button type="submit" class="btn-lime" id="setup-submit">Save Profile</button>
+          <span class="form-hint">Step 1 of 1. You can edit your profile later.</span>
+        </div>
+      </form>
+    </section>
+  </main>
+</div>
+
+<script>
+(function () {
+  const form = document.getElementById("setup-form");
+  const esc = value => KickoffUI.escapeHtml(value);
+  const pendingReturnTo = new URLSearchParams(location.search).get("return_to") || "";
+  let selectedAvatar = "";
+  let allAvatars = [];
+  let activeCategory = "male_character";
+  const categories = [
+    ["male_character", "Male Characters"],
+    ["female_character", "Female Characters"],
+    ["country_flag", "Country Flags"],
+    ["club", "Clubs"]
+  ];
+
+  function showError(message, options) {
+    KickoffUI.showFormError(form, message, Object.assign({ errorId: "setup-error" }, options || {}));
+  }
+
+  function safeReturnTo(value) {
+    const v = String(value || "").trim();
+    if (!v || v.length > 300 || /^[a-z][a-z0-9+.-]*:/i.test(v) || v.includes("//") || v.includes("\\")) return "";
+    if (!/^[A-Za-z0-9_.-]+\.html(?:\?[A-Za-z0-9%_.~=&+-]*)?$/.test(v) || v.startsWith("admin_")) return "";
+    return v;
+  }
+
+  function returnDestination() {
+    return safeReturnTo(pendingReturnTo) || "dashboard.html";
+  }
+
+  function optionRows(items) {
+    return `<option value="">Select one</option>` + (items || []).map(item => `<option value="${Number(item.id)}">${esc(item.name)}</option>`).join("");
+  }
+
+  function categoryLabel(category) {
+    return (categories.find(([key]) => key === category) || [category, category])[1];
+  }
+
+  function renderAvatarTabs() {
+    document.getElementById("avatar-tabs").innerHTML = categories.map(([key, label]) =>
+      `<button type="button" class="avatar-tab${key === activeCategory ? " active" : ""}" data-category="${key}">${esc(label)}</button>`
+    ).join("");
+    document.querySelectorAll("[data-category]").forEach(btn => btn.addEventListener("click", () => {
+      activeCategory = btn.dataset.category;
+      renderAvatarTabs();
+      renderAvatars(allAvatars);
+    }));
+  }
+
+  function renderAvatars(items) {
+    const grid = document.getElementById("avatar-grid");
+    const visible = (items || []).filter(avatar => avatar.category === activeCategory);
+    grid.innerHTML = visible.length ? visible.map(avatar => `
+      <button type="button" class="avatar-choice${avatar.filename === selectedAvatar ? " selected" : ""}" data-avatar="${esc(avatar.filename)}">
+        <img src="${esc(avatar.url)}" alt="${esc(avatar.label)}">
+        <span>${esc(avatar.label)}</span>
+        <small>${esc(categoryLabel(avatar.category))}</small>
+      </button>
+    `).join("") : `<div class="empty-state" style="min-height:100px;"><p>No active avatars in this category.</p></div>`;
+    if (!selectedAvatar && visible[0]) {
+      selectedAvatar = visible[0].filename;
+      grid.querySelector(`[data-avatar="${CSS.escape(selectedAvatar)}"]`)?.classList.add("selected");
+    }
+    grid.querySelectorAll("[data-avatar]").forEach(btn => btn.addEventListener("click", () => {
+      grid.querySelectorAll(".avatar-choice").forEach(item => item.classList.remove("selected"));
+      btn.classList.add("selected");
+      selectedAvatar = btn.dataset.avatar;
+    }));
+  }
+
+  async function init() {
+    const sessionRes = await fetch("api/users/session.php", { credentials: "same-origin" });
+    const session = await sessionRes.json();
+    if (!session.logged_in) {
+      window.location.href = safeReturnTo(pendingReturnTo) ? "login.html?return_to=" + encodeURIComponent(pendingReturnTo) : "login.html";
+      return;
+    }
+    if (session.csrf_token) KickoffUI.setCsrfToken(session.csrf_token);
+    document.getElementById("signed-in-meta").textContent = `Signed in as ${session.user.username}`;
+
+    const [catalogRes, avatarRes, profileRes] = await Promise.all([
+      fetch("api/users/catalog.php", { credentials: "same-origin" }),
+      fetch("api/users/avatars.php", { credentials: "same-origin" }),
+      fetch("api/users/profile.php", { credentials: "same-origin" })
+    ]);
+    const catalog = await catalogRes.json();
+    const avatars = await avatarRes.json();
+    const profile = await profileRes.json();
+    if (!catalog.success || !avatars.success || !profile.success) {
+      throw new Error("Could not load setup data.");
+    }
+    document.getElementById("setup-game").innerHTML = optionRows(catalog.games);
+    document.getElementById("setup-platform").innerHTML = optionRows(catalog.platforms);
+    document.getElementById("setup-ign").value = profile.user?.username || "";
+    allAvatars = avatars.avatars || [];
+    selectedAvatar = profile.user?.avatar_url ? "" : "";
+    renderAvatarTabs();
+    renderAvatars(allAvatars);
+    const gp = (profile.gameProfiles || [])[0];
+    if (gp) {
+      document.getElementById("setup-game").value = gp.game_id;
+      document.getElementById("setup-platform").value = gp.platform_id;
+      document.getElementById("setup-ign").value = gp.in_game_name || profile.user.username || "";
+      document.getElementById("setup-team").value = gp.team_name || "";
+    }
+  }
+
+  function validateSetup() {
+    KickoffUI.hideFormError(form, { errorId: "setup-error" });
+    if (!document.getElementById("setup-game").value) {
+      showError("Please select a supported game.", { field: "#setup-game", fieldMessage: "Choose the game you compete in." });
+      return false;
+    }
+    if (!document.getElementById("setup-platform").value) {
+      showError("Please select a tournament platform.", { field: "#setup-platform", fieldMessage: "Choose Mobile, PC, or Console." });
+      return false;
+    }
+    if (!document.getElementById("setup-ign").value.trim()) {
+      showError("Please enter your in-game name.", { field: "#setup-ign", fieldMessage: "This is the name opponents will recognize." });
+      return false;
+    }
+    if (!selectedAvatar) {
+      showError("Please select an avatar.", { field: "#avatar-grid", focusField: false });
+      return false;
+    }
+    return true;
+  }
+
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!validateSetup()) return;
+    const button = document.getElementById("setup-submit");
+    await KickoffUI.withButtonLoading(button, "Saving...", async () => {
+      const body = {
+        game_id: Number(document.getElementById("setup-game").value),
+        platform_id: Number(document.getElementById("setup-platform").value),
+        in_game_name: document.getElementById("setup-ign").value.trim(),
+        team_name: document.getElementById("setup-team").value.trim(),
+        avatar: selectedAvatar
+      };
+      let data;
+      try {
+        const res = await fetch("api/users/update.php", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify(body)
+        });
+        data = await res.json();
+      } catch (error) {
+        showError("We couldn't save your profile right now. Please try again.");
+        return;
+      }
+      if (!data.success) {
+        const expired = /token|csrf|session/i.test(data.error || "");
+        showError(expired ? "Your security session expired. Please refresh the page and try again." : (data.error || "Could not save profile."));
+        return;
+      }
+      window.location.href = returnDestination();
+    });
+  });
+
+  document.getElementById("logout-btn").addEventListener("click", async () => {
+    await fetch("api/auth/logout.php", { credentials: "same-origin" }).catch(() => null);
+    window.location.href = "login.html";
+  });
+
+  init().catch(error => showError(error.message || "Could not load setup data."));
+})();
+</script>
+</body>
+</html>

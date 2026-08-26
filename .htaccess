@@ -1,0 +1,57 @@
+# KICKOFF protected HTML gates
+AddType application/x-httpd-php .html
+AddHandler application/x-httpd-php .html
+
+# ── KICKOFF — Apache Configuration ──────────────────────────
+
+# Prevent directory listing
+Options -Indexes
+
+# Disable server signature
+ServerSignature Off
+
+# Block direct access to sensitive directories
+<FilesMatch "\.(sql|log|md|sh|env|json)$">
+    Require all denied
+</FilesMatch>
+
+# Block sensitive server-side folders while allowing the shared navigation script.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^config/ - [F,L]
+    RewriteRule ^includes/(?!nav\.js$).* - [F,L]
+</IfModule>
+
+# Security headers
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    <Files "nav.js">
+        Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        Header set Pragma "no-cache"
+        Header set Expires "0"
+    </Files>
+</IfModule>
+
+# Enable compression
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/css application/javascript
+</IfModule>
+
+# Cache static assets
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 1 week"
+    ExpiresByType application/javascript "access plus 1 week"
+    ExpiresByType image/jpeg "access plus 1 month"
+    ExpiresByType image/png "access plus 1 month"
+    ExpiresByType image/webp "access plus 1 month"
+</IfModule>
+
+# Block SQL file access
+<FilesMatch "\.sql$">
+    Require all denied
+</FilesMatch>

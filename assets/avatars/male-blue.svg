@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Blue captain avatar">
+  <rect width="256" height="256" rx="48" fill="#0b1b35"/><circle cx="128" cy="101" r="56" fill="#8f5c43"/><path d="M73 88q12-61 55-61 48 0 57 64l-32-20-66 14z" fill="#111827"/>
+  <path d="M48 239q8-88 80-88t80 88" fill="#2563eb"/><path d="M100 159l28 30 28-30 15 80H85z" fill="#1d4ed8"/>
+  <circle cx="106" cy="103" r="5"/><circle cx="150" cy="103" r="5"/><path d="M108 137q20 12 40 0" fill="none" stroke="#543426" stroke-width="6" stroke-linecap="round"/>
+</svg>

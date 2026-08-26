@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Football striker avatar">
+  <rect width="256" height="256" rx="48" fill="#071a13"/><circle cx="204" cy="49" r="24" fill="#fff"/><path d="M192 31l18 3 8 17-12 16-20-4-5-18z" fill="#17211d"/>
+  <circle cx="128" cy="99" r="54" fill="#7b4c34"/><path d="M73 92q8-61 56-61 47 0 55 63l-31-23-62 14z" fill="#101010"/>
+  <path d="M48 239q8-88 80-88t80 88" fill="#ff4e00"/><path d="M109 157l19 24 19-24 19 82H90z" fill="#f8fafc"/>
+  <circle cx="108" cy="105" r="5"/><circle cx="149" cy="105" r="5"/><path d="M108 135q20 15 40 0" fill="none" stroke="#3b2118" stroke-width="6" stroke-linecap="round"/>
+</svg>

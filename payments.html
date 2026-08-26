@@ -1,0 +1,84 @@
+<?php require_once __DIR__ . '/includes/page_guard.php'; requirePlayerPage(); ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Payments & Winnings - KICKOFF</title>
+<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="assets/css/page-overrides.css">
+<script src="assets/js/kickoff-ui.js"></script>
+<script src="includes/nav.js" data-page="payments" data-layout="app"></script>
+</head>
+<body>
+<div id="page-main">
+  <div class="sec-tag">Account</div>
+  <h1 class="sec-title">Payments &amp; <em>Winnings</em></h1>
+  <div class="stats-grid" id="payment-stats"></div>
+  <section class="section-panel">
+    <div class="panel-header">
+      <h2 class="panel-title">Payment History</h2>
+      <a class="panel-link" href="tournaments.html">Browse Paid Tournaments</a>
+    </div>
+    <div class="tab-nav">
+      <button class="tab-btn active" data-tab="payments">Payments</button>
+      <button class="tab-btn" data-tab="ledger">Ledger</button>
+      <button class="tab-btn" data-tab="payouts">Winnings</button>
+    </div>
+    <div class="table-wrap"><table class="data-table"><thead id="pay-head"></thead><tbody id="pay-rows"></tbody></table></div>
+  </section>
+</div>
+<script>
+const esc = value => KickoffUI.escapeHtml(value);
+let finance = {};
+let activeTab = "payments";
+const columns = {
+  payments: ["Tournament", "Order", "Amount", "Status", "Created"],
+  ledger: ["Type", "Tournament", "Direction", "Amount", "Reference"],
+  payouts: ["Tournament", "Amount", "Status", "Approved", "Paid"]
+};
+function money(amount, currency) { return `${esc(currency || "TZS")} ${Number(amount || 0).toLocaleString()}`; }
+function badge(status) {
+  const cls = ["paid", "approved", "submitted"].includes(status) ? "badge-win" : ["failed", "cancelled"].includes(status) ? "badge-loss" : "badge-soon";
+  return `<span class="badge ${cls}">${esc(status || "-")}</span>`;
+}
+function renderStats() {
+  const s = finance.summary || {};
+  document.getElementById("payment-stats").innerHTML = `
+    <div class="stat-card"><span class="stat-num">${money(s.paid_total || 0, "TZS")}</span><span class="stat-label">Entry Fees Paid</span></div>
+    <div class="stat-card"><span class="stat-num">${money(s.pending_total || 0, "TZS")}</span><span class="stat-label">Pending</span></div>
+    <div class="stat-card"><span class="stat-num">${money(s.refund_total || 0, "TZS")}</span><span class="stat-label">Refunds</span></div>
+    <div class="stat-card"><span class="stat-num">${money(s.payout_total || 0, "TZS")}</span><span class="stat-label">Winnings</span></div>`;
+}
+function row(item) {
+  if (activeTab === "payments") return `<tr><td>${esc(item.tournament_name || "-")}</td><td>${esc(item.order_reference)}</td><td>${money(item.amount, item.currency)}</td><td>${badge(item.status)}</td><td>${esc(item.created_at)}</td></tr>`;
+  if (activeTab === "ledger") return `<tr><td>${esc(item.entry_type)}</td><td>${esc(item.tournament_name || "-")}</td><td>${esc(item.direction)}</td><td>${money(item.amount, item.currency)}</td><td>${esc(item.reference || "-")}</td></tr>`;
+  return `<tr><td>${esc(item.tournament_name || "-")}</td><td>${money(item.amount, item.currency)}</td><td>${badge(item.status)}</td><td>${esc(item.approved_at || "-")}</td><td>${esc(item.paid_at || "-")}</td></tr>`;
+}
+function renderTable() {
+  document.getElementById("pay-head").innerHTML = `<tr>${columns[activeTab].map(c => `<th>${c}</th>`).join("")}</tr>`;
+  const items = finance[activeTab] || [];
+  document.getElementById("pay-rows").innerHTML = items.length ? items.map(row).join("") : `<tr><td colspan="${columns[activeTab].length}"><div class="empty-state" style="min-height:90px;">No records yet.</div></td></tr>`;
+}
+async function load() {
+  try {
+    const res = await fetch("api/users/payments.php", { credentials: "same-origin" });
+    finance = await res.json();
+    if (!finance.success) throw new Error(finance.error || "Could not load finance data.");
+    renderStats();
+    renderTable();
+  } catch (error) {
+    document.getElementById("payment-stats").innerHTML = "";
+    document.getElementById("pay-rows").innerHTML = `<tr><td colspan="5"><div class="alert alert-error" style="display:block;">Could not load payments.</div></td></tr>`;
+  }
+}
+document.querySelectorAll("[data-tab]").forEach(btn => btn.addEventListener("click", () => {
+  document.querySelectorAll("[data-tab]").forEach(item => item.classList.remove("active"));
+  btn.classList.add("active");
+  activeTab = btn.dataset.tab;
+  renderTable();
+}));
+load();
+</script>
+</body>
+</html>

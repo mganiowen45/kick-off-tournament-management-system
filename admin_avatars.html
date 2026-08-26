@@ -1,0 +1,72 @@
+<?php require_once __DIR__ . '/includes/page_guard.php'; requireAdminPage(); ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Avatars - KICKOFF Admin</title>
+<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="assets/css/page-overrides.css">
+<script src="assets/js/kickoff-ui.js"></script>
+<script src="includes/nav.js" data-page="admin_avatars" data-layout="admin"></script>
+</head>
+<body>
+<div id="page-main">
+  <div class="sec-tag">Catalog</div>
+  <h1 class="sec-title">Avatar <em>Library</em></h1>
+  <section class="section-panel">
+    <form id="avatar-form" class="form-row-3">
+      <input type="hidden" id="avatar-id">
+      <input class="form-input" id="avatar-name" placeholder="Avatar name" required>
+      <select class="form-select form-input" id="avatar-category">
+        <option value="male_character">Male Characters</option>
+        <option value="female_character">Female Characters</option>
+        <option value="country_flag">Country Flags</option>
+        <option value="club">Clubs</option>
+      </select>
+      <input class="form-input" id="avatar-file" placeholder="filename.svg" required>
+      <input class="form-input" id="avatar-sort" type="number" value="100" step="10">
+      <button class="btn-lime" type="submit">Save Avatar</button>
+    </form>
+  </section>
+  <section class="section-panel">
+    <div class="table-wrap"><table class="data-table"><thead><tr><th>Avatar</th><th>Name</th><th>Category</th><th>Status</th><th>Actions</th></tr></thead><tbody id="avatar-rows"></tbody></table></div>
+  </section>
+</div>
+<script>
+const esc = value => KickoffUI.escapeHtml(value);
+const categoryLabel = { male_character: "Male Characters", female_character: "Female Characters", country_flag: "Country Flags", club: "Clubs" };
+async function load() {
+  const res = await fetch("api/admin/avatars.php", { credentials: "same-origin" });
+  const data = await res.json();
+  document.getElementById("avatar-rows").innerHTML = (data.avatars || []).map(a => `<tr>
+    <td><img src="assets/avatars/${esc(a.file_path)}" alt="" style="width:42px;height:42px;object-fit:contain;"></td>
+    <td>${esc(a.name)}</td><td>${esc(categoryLabel[a.category] || a.category)}</td><td>${Number(a.is_active) ? "Active" : "Inactive"}</td>
+    <td><button class="btn-ghost" onclick='editAvatar(${JSON.stringify(a).replace(/'/g, "&#039;")})'>Edit</button> <button class="btn-ghost" onclick="toggleAvatar(${Number(a.id)},${Number(a.is_active) ? 0 : 1})">${Number(a.is_active) ? "Deactivate" : "Activate"}</button></td>
+  </tr>`).join("");
+}
+function editAvatar(a) {
+  document.getElementById("avatar-id").value = a.id;
+  document.getElementById("avatar-name").value = a.name;
+  document.getElementById("avatar-category").value = a.category;
+  document.getElementById("avatar-file").value = a.file_path;
+  document.getElementById("avatar-sort").value = a.sort_order || 100;
+}
+async function toggleAvatar(id, active) {
+  const res = await fetch("api/admin/avatars.php", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ action: "toggle", id, is_active: active }) });
+  const data = await res.json();
+  KickoffUI.toast(data.success ? "Avatar updated." : (data.error || "Could not update avatar."), data.success ? "success" : "error");
+  load();
+}
+document.getElementById("avatar-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const body = { id: Number(document.getElementById("avatar-id").value || 0), name: document.getElementById("avatar-name").value, category: document.getElementById("avatar-category").value, file_path: document.getElementById("avatar-file").value, sort_order: Number(document.getElementById("avatar-sort").value || 0) };
+  const res = await fetch("api/admin/avatars.php", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify(body) });
+  const data = await res.json();
+  KickoffUI.toast(data.success ? "Avatar saved." : (data.error || "Could not save avatar."), data.success ? "success" : "error");
+  if (data.success) { event.target.reset(); document.getElementById("avatar-id").value = ""; load(); }
+});
+load();
+</script>
+</body>
+</html>

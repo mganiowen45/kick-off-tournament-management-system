@@ -1,0 +1,75 @@
+<?php require_once __DIR__ . '/includes/page_guard.php'; requireAdminPage(); ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tournament Covers - KICKOFF Admin</title>
+<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="assets/css/page-overrides.css">
+<script src="assets/js/kickoff-ui.js"></script>
+<script src="includes/nav.js" data-page="admin_tournament_covers" data-layout="admin"></script>
+</head>
+<body>
+<div id="page-main">
+  <div class="sec-tag">Catalog</div>
+  <h1 class="sec-title">Tournament <em>Covers</em></h1>
+  <section class="section-panel">
+    <form id="cover-form" class="form-row-3">
+      <input type="hidden" id="cover-id">
+      <input class="form-input" id="cover-name" placeholder="Cover name" required>
+      <input class="form-input" id="cover-category" placeholder="Category" required>
+      <input class="form-input" id="cover-file" placeholder="assets/tournament-covers/name.jpg" required>
+      <input class="form-input" id="cover-sort" type="number" value="100" step="10">
+      <button class="btn-lime" type="submit">Save Cover</button>
+    </form>
+  </section>
+  <div class="t-grid" id="cover-grid"></div>
+</div>
+<script>
+const esc = value => KickoffUI.escapeHtml(value);
+async function load() {
+  const res = await fetch("api/admin/covers.php", { credentials: "same-origin" });
+  const data = await res.json();
+  document.getElementById("cover-grid").innerHTML = (data.covers || []).map(c => `<div class="t-card t-card-cover">
+    <div class="tc-cover"><img src="${esc(c.resolved_file_path || c.file_path)}" alt=""></div>
+    <div class="tc-body">
+      <div class="tc-name">${esc(c.name)} ${c.asset_missing ? '<span class="badge badge-loss">Missing file</span>' : ""}</div>
+      <div class="tc-host">${esc(c.category)} - ${Number(c.is_active) ? "Active" : "Inactive"} - ${esc(c.file_path)}</div>
+      <div style="display:flex;gap:8px;margin-top:1rem;">
+        <button class="btn-ghost" onclick='editCover(${JSON.stringify(c).replace(/'/g, "&#039;")})'>Edit</button>
+        <button class="btn-ghost" onclick="toggleCover(this,${Number(c.id)},${Number(c.is_active) ? 0 : 1})">${Number(c.is_active) ? "Deactivate" : "Activate"}</button>
+      </div>
+    </div>
+  </div>`).join("");
+}
+function editCover(c) {
+  document.getElementById("cover-id").value = c.id;
+  document.getElementById("cover-name").value = c.name;
+  document.getElementById("cover-category").value = c.category;
+  document.getElementById("cover-file").value = c.file_path;
+  document.getElementById("cover-sort").value = c.sort_order || 100;
+}
+async function toggleCover(btn, id, active) {
+  await KickoffUI.withButtonLoading(btn, "Updating...", async () => {
+    const res = await fetch("api/admin/covers.php", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ action: "toggle", id, is_active: active }) });
+    const data = await res.json();
+    KickoffUI.toast(data.success ? "Cover updated." : (data.error || "Could not update cover."), data.success ? "success" : "error");
+    load();
+  });
+}
+document.getElementById("cover-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const btn = event.submitter || event.currentTarget.querySelector("button[type=submit]");
+  const body = { id: Number(document.getElementById("cover-id").value || 0), name: document.getElementById("cover-name").value, category: document.getElementById("cover-category").value, file_path: document.getElementById("cover-file").value, sort_order: Number(document.getElementById("cover-sort").value || 0) };
+  await KickoffUI.withButtonLoading(btn, "Saving...", async () => {
+    const res = await fetch("api/admin/covers.php", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify(body) });
+    const data = await res.json();
+    KickoffUI.toast(data.success ? "Cover saved." : (data.error || "Could not save cover."), data.success ? "success" : "error");
+    if (data.success) { event.target.reset(); document.getElementById("cover-id").value = ""; load(); }
+  });
+});
+load();
+</script>
+</body>
+</html>

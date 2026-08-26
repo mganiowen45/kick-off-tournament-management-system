@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tournament - KICKOFF</title>
+<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="assets/css/page-overrides.css">
+<link rel="stylesheet" href="assets/css/tournament-cards.css">
+<script src="assets/js/kickoff-ui.js"></script>
+<script src="assets/js/tournament-card.js"></script>
+<script src="includes/nav.js" data-page="tournament_detail" data-layout="adaptive"></script>
+</head>
+<body>
+<div id="page-main">
+  <div id="page-content">
+    <div style="padding:3rem;text-align:center;color:var(--muted);">Loading tournament...</div>
+  </div>
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const tournamentId = params.get("id");
+const inviteToken = params.get("invite") || "";
+if (!tournamentId) window.location.href = "tournaments.html";
+let currentUser = null;
+let permissions = {};
+const esc = value => KickoffUI.escapeHtml(value);
+const jsString = value => String(value ?? "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+
+const formatPillClass = { "1v1": "tc-format-1v1", full_knockout: "tc-format-ko", group_knockout: "tc-format-group" };
+
+function statusPill(t) {
+  const info = KickoffTournamentCard.statusInfo(t);
+  return `<span class="tc-pill ${info.cls}">${info.dot ? '<span class="live-dot"></span>' : ""}${esc(info.label)}</span>`;
+}
+
+function money(value, currency) {
+  return KickoffTournamentCard.money(value, currency || "TZS") || "TZS 0";
+}
+
+function formatRule(format) {
+  if (format === "1v1") return "Best-of-3 series";
+  if (format === "group_knockout") return "Single group fixtures, single knockout matches";
+  return "Single elimination matches";
+}
+
+async function load() {
+  const sessionRes = await fetch("api/users/session.php", { credentials: "same-origin" });
+  const session = await sessionRes.json();
+  if (session.logged_in) currentUser = session.user;
+
+  const res = await fetch(`api/tournaments/get.php?id=${encodeURIComponent(tournamentId)}&invite=${encodeURIComponent(inviteToken)}`, { credentials: "same-origin" });
+  const data = await res.json();
+  if (!data.success) {
+    document.getElementById("page-content").innerHTML = '<div style="padding:3rem;text-align:center;color:var(--fire);">Tournament not found or invite expired.</div>';
+    return;
+  }
+
+  const t = data.tournament;
+  const players = data.players || [];
+  const matches = data.matches || [];
+  permissions = data.permissions || {};
+  const upcoming = matches.filter(m => m.status !== "confirmed");
+  const completed = matches.filter(m => m.status === "confirmed");
+  const seriesMatches = matches.filter(m => m.stage === "series" || Number(m.series_id || 0) > 0);
+  const pct = Number(t.max_players || 0) > 0 ? Math.round(Number(t.current_players || 0) / Number(t.max_players) * 100) : 0;
+  const isInTournament = currentUser && players.some(p => Number(p.user_id) === Number(currentUser.id));
+  const canJoin = permissions.can_join === true;
+  const canJoinAfterAuth = permissions.can_join_after_auth === true;
+  const finance = KickoffTournamentCard.financeInfo(t);
+  const cover = KickoffTournamentCard.coverUrl(t);
+  const pendingPayment = ["pending", "failed"].includes(String(t.viewer_payment_status || "")) && t.pending_checkout_url;
+  document.title = `${t.name} - KICKOFF`;
+
+  document.getElementById("page-content").innerHTML = `
+    <div class="t-detail-hero" style="--tc-cover:url('${esc(cover)}')">
+      <div class="t-hero-top">
+        <div>
+          <div class="t-badges">
+            <span class="tc-pill ${formatPillClass[t.format] || "tc-format-1v1"}">${esc(t.format_label || t.format)}</span>
+            ${statusPill(t)}
+            <span class="tc-pill tc-status-upcoming">${esc(t.visibility || "public")}</span>
+          </div>
+          <h1 class="t-detail-title">${esc(t.name)}</h1>
+          <p class="t-detail-host">Hosted by <strong>${esc(t.creator_username)}</strong> - ${esc(t.game_name || t.game)} on ${esc(t.platform_name || "Platform")}</p>
+        </div>
+        <div class="t-detail-actions">
+          ${permissions.can_share_invite ? `<button type="button" class="btn-ghost" onclick="copyInvite('${jsString(t.share_token || "")}')">Copy Invite</button>
+          <button type="button" class="btn-ghost" onclick="regenerateInvite()">Regenerate Invite</button>
+          <button type="button" class="btn-danger" onclick="revokeInvite()">Revoke Invite</button>` : ""}
+          ${t.format === "1v1" ? `<button type="button" class="btn-lime" onclick="switchTab(document.querySelector('[data-tab-target=series]'),'series')">View Series</button>` : `<a href="bracket.html?id=${Number(t.id)}${inviteToken ? `&invite=${encodeURIComponent(inviteToken)}` : ""}" class="btn-lime">View Bracket</a>`}
+          ${pendingPayment ? `<button class="btn-ghost" id="payment-btn" onclick="continuePayment(this,'${jsString(t.pending_checkout_url)}')">Continue Payment</button>` : ""}
+          ${canJoin ? `<button class="btn-ghost" id="join-btn" onclick="joinTournament(this,${Number(t.id)})">Join Tournament</button>` : ""}
+          ${!currentUser && canJoinAfterAuth ? `<button class="btn-ghost" id="join-btn" onclick="joinTournament(this,${Number(t.id)})">Log In to Join</button>` : ""}
+          ${permissions.can_request_cancellation ? `<button class="btn-ghost" onclick="requestCancellation(${Number(t.id)})">Request Cancellation</button>` : ""}
+        </div>
+      </div>
+      <div class="t-detail-meta">
+        <div class="thm"><div class="thm-v">${Number(t.max_players || 0)}</div><div class="thm-l">Players</div></div>
+        <div class="thm"><div class="thm-v">${finance.prizeValue}</div><div class="thm-l">${esc(finance.prizeLabel)}</div></div>
+        <div class="thm"><div class="thm-v">${esc(finance.entryValue)}</div><div class="thm-l">Entry</div></div>
+        <div class="thm"><div class="thm-v">${Number(t.current_players || 0)}</div><div class="thm-l">Enrolled</div></div>
+        <div class="thm"><div class="thm-v">${Number(t.current_round || 1)}</div><div class="thm-l">Round</div></div>
+        <div class="thm"><div class="thm-v">${effectiveStartLabel(t)}</div><div class="thm-l">${t.auto_start_at ? "Auto Start" : "Start Date"}</div></div>
+      </div>
+      ${autoStartNotice(t)}
+      <div class="tc-capacity" style="margin-top:1.2rem;">
+        <div class="tc-capacity-top"><span>${Number(t.current_players || 0)} / ${Number(t.max_players || 0)} SPOTS FILLED</span><strong>${pct}%</strong></div>
+        <div class="tc-progress"><div style="width:${pct}%;"></div></div>
+      </div>
+    </div>
+
+    <div style="padding:0 2rem;">
+      <div class="tab-nav">
+        ${t.format === "1v1" ? `<button class="tab-btn active" data-tab-target="series" onclick="switchTab(this,'series')">Series</button>` : ""}
+        <button class="tab-btn ${t.format === "1v1" ? "" : "active"}" onclick="switchTab(this,'matches')">Matches (${matches.length})</button>
+        <button class="tab-btn" onclick="switchTab(this,'players')">Players (${players.length})</button>
+        <button class="tab-btn" onclick="switchTab(this,'info')">Info &amp; Rules</button>
+      </div>
+      ${t.format === "1v1" ? `<div class="tab-pane active" id="tab-series">${renderSeries(seriesMatches, players)}</div>` : ""}
+      <div class="tab-pane ${t.format === "1v1" ? "" : "active"}" id="tab-matches">
+        ${renderMatches("Upcoming", upcoming)}
+        ${renderMatches("Completed", completed)}
+        ${!matches.length ? '<div style="color:var(--muted);padding:1rem 0;">No matches scheduled yet. Once registration fills, KICKOFF schedules automatic start and the lifecycle cron generates fixtures when due.</div>' : ""}
+      </div>
+      <div class="tab-pane" id="tab-players">
+        <div class="player-grid">${players.map(renderPlayer).join("")}</div>
+      </div>
+      <div class="tab-pane" id="tab-info">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;">
+          <div class="card">
+            <div class="card-title">Tournament Info</div>
+            <div class="info-row"><span>Format</span><span>${esc(t.format_label || t.format)}</span></div>
+            <div class="info-row"><span>Max Players</span><span>${Number(t.max_players || 0)}</span></div>
+            <div class="info-row"><span>Game</span><span>${esc(t.game_name || t.game)} / ${esc(t.platform_name || "Platform")}</span></div>
+            <div class="info-row"><span>Match Rule</span><span>${esc(formatRule(t.format))}</span></div>
+            <div class="info-row"><span>Funding</span><span>${esc(finance.note)}</span></div>
+            <div class="info-row"><span>Entry Fee</span><span>${esc(finance.entryValue)}</span></div>
+            <div class="info-row"><span>${esc(finance.prizeLabel)}</span><span style="color:var(--lime);">${finance.prizeValue}</span></div>
+            <div class="info-row"><span>Visibility</span><span>${esc(t.visibility || "public")}</span></div>
+            <div class="info-row"><span>Planned Start</span><span>${dateTimeLabel(t.start_date)}</span></div>
+            <div class="info-row"><span>Automatic Start</span><span>${t.auto_start_at ? dateTimeLabel(t.auto_start_at) : "Scheduled when full"}</span></div>
+            <div class="info-row"><span>Check-in</span><span>${t.check_in_opens_at ? dateTimeLabel(t.check_in_opens_at) : "Scheduled when full"}</span></div>
+          </div>
+          <div class="card">
+            <div class="card-title">Description &amp; Rules</div>
+            <div style="font-size:.84rem;color:var(--muted);line-height:1.75;">${esc(t.description || "No description provided.")}</div>
+            <div style="margin-top:1rem;font-size:.84rem;color:var(--muted);line-height:1.75;">
+              <p style="margin-bottom:.5rem;">1. Match scheduling is coordinated through WhatsApp where both players allow it.</p>
+              <p style="margin-bottom:.5rem;">2. Both players submit results with screenshot evidence.</p>
+              <p style="margin-bottom:.5rem;">3. Matching submissions confirm automatically; conflicts open a dispute.</p>
+              <p>4. Admin decisions, walkovers, refunds, and payouts are handled server-side.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  const joinBtn = document.getElementById("join-btn");
+  if (params.get("join") === "1" && currentUser && canJoin && joinBtn) {
+    joinBtn.scrollIntoView({ behavior: "smooth", block: "center" });
+    joinBtn.focus({ preventScroll: true });
+    setTimeout(() => joinTournament(joinBtn, Number(t.id)), 450);
+  }
+}
+
+function dateTimeLabel(value) {
+  if (!value) return "TBA";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "TBA" : date.toLocaleString("en", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function effectiveStartLabel(t) {
+  const value = t.auto_start_at || t.start_date;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "TBA" : date.toLocaleDateString("en", { month: "short", day: "numeric" });
+}
+
+function autoStartNotice(t) {
+  if (!t.auto_start_at || String(t.status || "") !== "open") return "";
+  const date = new Date(t.auto_start_at);
+  const ms = date.getTime() - Date.now();
+  const countdown = Number.isFinite(ms) && ms > 0
+    ? ` - starts in ${Math.floor(ms / 3600000)}h ${Math.max(0, Math.floor((ms % 3600000) / 60000))}m`
+    : "";
+  return `<div class="alert-info" style="display:block;margin-top:1rem;">Tournament full - automatic start scheduled for ${dateTimeLabel(t.auto_start_at)}${countdown}.</div>`;
+}
+
+function renderMatches(title, rows) {
+  if (!rows.length) return "";
+  return `<div style="font-family:var(--font-ui);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin:1rem 0 .8rem;">${title}</div>
+    ${rows.map(m => `<div class="match-row">
+      <div class="mr-players"><span${currentUser && Number(m.player1_id) === Number(currentUser.id) ? ' style="color:var(--lime)"' : ""}>${esc(m.player1_name)}</span><span class="mr-vs">VS</span><span${currentUser && Number(m.player2_id) === Number(currentUser.id) ? ' style="color:var(--lime)"' : ""}>${esc(m.player2_name)}</span></div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;">
+        <span class="mr-score">${m.status === "confirmed" ? `${Number(m.player1_score)} - ${Number(m.player2_score)}` : ""}</span>
+        <span class="badge ${m.status === "confirmed" ? "badge-win" : m.status === "disputed" ? "badge-loss" : "badge-soon"}">${esc(m.status)}</span>
+        ${matchActions(m)}
+      </div>
+    </div>`).join("")}`;
+}
+
+function renderSeries(rows, players) {
+  const first = rows[0] || {};
+  const p1 = players.find(p => Number(p.user_id) === Number(first.player1_id)) || {};
+  const p2 = players.find(p => Number(p.user_id) === Number(first.player2_id)) || {};
+  const p1Wins = rows.filter(m => Number(m.winner_id) === Number(first.player1_id)).length;
+  const p2Wins = rows.filter(m => Number(m.winner_id) === Number(first.player2_id)).length;
+  return `<div class="section-panel" style="margin-top:1rem;">
+    <div class="panel-header"><h2 class="panel-title">Best Of 3 Series</h2><span class="badge badge-open">${p1Wins} - ${p2Wins}</span></div>
+    <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:1rem;align-items:center;margin-bottom:1rem;">
+      <div class="player-item"><div class="p-av">${p1.avatar_url ? `<img src="${esc(p1.avatar_url)}" alt="">` : ""}</div><div><div class="p-name">${esc(p1.username || first.player1_name || "Player A")}</div><div class="p-sub">${p1Wins} wins</div></div></div>
+      <div class="font-display text-lime">${p1Wins} : ${p2Wins}</div>
+      <div class="player-item"><div class="p-av">${p2.avatar_url ? `<img src="${esc(p2.avatar_url)}" alt="">` : ""}</div><div><div class="p-name">${esc(p2.username || first.player2_name || "Player B")}</div><div class="p-sub">${p2Wins} wins</div></div></div>
+    </div>
+    ${[1,2,3].map(game => {
+      const match = rows.find(m => Number(m.series_game_number) === game);
+      return `<div class="match-row">
+        <div><div class="dash-row-title">Game ${game}</div><div class="dash-row-sub">${match ? `${esc(match.player1_name)} vs ${esc(match.player2_name)}` : "If needed"}</div></div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          ${match && match.status === "confirmed" ? `<span class="mr-score">${Number(match.player1_score)} - ${Number(match.player2_score)}</span>` : ""}
+          <span class="badge ${match ? (match.status === "confirmed" ? "badge-win" : "badge-soon") : "badge-soon"}">${esc(match ? match.status : "TBD")}</span>
+          ${match ? matchActions(match) : ""}
+        </div>
+      </div>`;
+    }).join("")}
+  </div>`;
+}
+
+function renderPlayer(p) {
+  return `<div class="player-item" onclick="location.href='profile.html?id=${Number(p.user_id)}'" style="cursor:pointer;">
+    <div class="p-av"><img src="${esc(p.avatar_url)}" alt=""></div>
+    <div><div class="p-name">${esc(p.username)}</div><div class="p-sub">${esc(p.country || "")} - ${esc(p.status)}</div></div>
+  </div>`;
+}
+
+function switchTab(btn, id) {
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
+  btn.classList.add("active");
+  document.getElementById("tab-" + id).classList.add("active");
+}
+
+function isMyMatch(m) {
+  return currentUser && (Number(m.player1_id) === Number(currentUser.id) || Number(m.player2_id) === Number(currentUser.id));
+}
+
+function matchActions(m) {
+  if (!isMyMatch(m) || !["scheduled", "pending_result", "disputed"].includes(m.status)) return "";
+  const id = Number(m.id);
+  return `<a href="submit_result.html?match_id=${id}" class="btn-lime" style="padding:5px 12px;font-size:.72rem;">Submit Result</a>
+    <button type="button" class="btn-ghost" style="padding:5px 12px;font-size:.72rem;" onclick="reportNoShow(${id})">Report No-Show</button>`;
+}
+
+async function continuePayment(btn, url) {
+  await KickoffUI.withButtonLoading(btn, "Loading payment...", async () => {
+    window.location.href = url;
+  });
+}
+
+async function joinTournament(btnOrId, maybeId) {
+  const id = maybeId || btnOrId;
+  if (!currentUser) {
+    const returnUrl = new URL(location.pathname.split("/").pop(), location.href);
+    returnUrl.searchParams.set("id", String(id));
+    if (inviteToken) returnUrl.searchParams.set("invite", inviteToken);
+    returnUrl.searchParams.set("join", "1");
+    location.href = "login.html?return_to=" + encodeURIComponent(returnUrl.pathname.split("/").pop() + returnUrl.search);
+    return;
+  }
+  if (!await KickoffUI.confirm({ title: "Join Tournament", message: "Join this tournament now?", okText: "Join" })) return;
+  const btn = typeof btnOrId === "object" ? btnOrId : document.getElementById("join-btn");
+  await KickoffUI.withButtonLoading(btn, "Checking eligibility...", async () => {
+    btn.innerHTML = `<span class="spinner" style="width:14px;height:14px;"></span>Joining...`;
+    const res = await fetch("api/tournaments/join.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ tournament_id: id, invite_token: inviteToken })
+    });
+    const data = await res.json();
+    if (data.success && data.payment && data.payment.checkout_url) {
+      window.location.href = data.payment.checkout_url;
+      return;
+    }
+    if (data.success) {
+      window.location.href = data.redirect || `tournament_detail.html?id=${id}`;
+    } else {
+      KickoffUI.toast(data.error || "Could not join tournament.", "error");
+    }
+  });
+}
+
+async function copyInvite(token) {
+  const url = new URL(`tournament_detail.html?id=${encodeURIComponent(tournamentId)}${token ? "&invite=" + encodeURIComponent(token) : ""}`, window.location.href).href;
+  if (navigator.clipboard) {
+    await navigator.clipboard.writeText(url);
+    KickoffUI.toast("Invite link copied.", "success");
+  } else {
+    await KickoffUI.prompt({ title: "Copy Invite Link", message: url, value: url, okText: "Done" });
+  }
+}
+
+async function requestCancellation(id) {
+  const reason = await KickoffUI.prompt({ title: "Request Cancellation", message: "Tell admins why this tournament should be cancelled.", okText: "Send Request", maxLength: 1000 });
+  if (!reason) return;
+  const res = await fetch("api/tournaments/request_cancellation.php", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ tournament_id: id, reason })
+  });
+  const data = await res.json();
+  KickoffUI.toast(data.success ? "Cancellation request sent for admin review." : (data.error || "Could not send request."), data.success ? "success" : "error");
+}
+
+async function regenerateInvite() {
+  if (!await KickoffUI.confirm({ title: "Regenerate Invite", message: "The old private invite link will stop working.", okText: "Regenerate" })) return;
+  const res = await fetch("api/tournaments/invite.php", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ tournament_id: Number(tournamentId), action: "regenerate" })
+  });
+  const data = await res.json();
+  if (data.success && data.share_url) {
+    const url = new URL(data.share_url, window.location.href).href;
+    if (navigator.clipboard) await navigator.clipboard.writeText(url);
+    KickoffUI.toast("New invite link copied.", "success");
+    load();
+    return;
+  }
+  KickoffUI.toast(data.error || "Could not regenerate invite.", "error");
+}
+
+async function revokeInvite() {
+  if (!await KickoffUI.confirm({ title: "Revoke Invite", message: "Existing invite links will no longer open this private tournament.", okText: "Revoke", danger: true })) return;
+  const res = await fetch("api/tournaments/invite.php", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ tournament_id: Number(tournamentId), action: "revoke" })
+  });
+  const data = await res.json();
+  KickoffUI.toast(data.success ? "Invite link revoked." : (data.error || "Could not revoke invite."), data.success ? "success" : "error");
+  if (data.success) load();
+}
+
+async function reportNoShow(matchId) {
+  const reason = await KickoffUI.prompt({ title: "Report No-Show", message: "Briefly explain the missed match or failed contact.", okText: "Submit Report", maxLength: 1000 });
+  if (!reason) return;
+  const res = await fetch("api/matches/report_no_show.php", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ match_id: Number(matchId), reason })
+  });
+  const data = await res.json();
+  KickoffUI.toast(data.success ? "No-show report submitted for admin review." : (data.error || "Could not submit report."), data.success ? "success" : "error");
+  if (data.success) load();
+}
+
+load();
+</script>
+</body>
+</html>

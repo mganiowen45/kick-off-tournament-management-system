@@ -1,0 +1,261 @@
+<?php require_once __DIR__ . '/includes/page_guard.php'; requirePlayerPage(); ?>
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard - KICKOFF</title>
+<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="assets/css/tournament-cards.css">
+<script src="assets/js/kickoff-ui.js"></script>
+<script src="assets/js/tournament-card.js"></script>
+<script src="includes/nav.js" data-page="dashboard" data-layout="app"></script>
+</head>
+<body>
+<div id="page-main">
+  <div class="sec-tag">Player Dashboard</div>
+  <div class="flex-between gap-md" style="flex-wrap:wrap;margin-bottom:1.25rem;">
+    <div>
+      <h1 class="sec-title" style="margin-bottom:.45rem;">Welcome back, <em id="dash-name">Player</em></h1>
+      <p class="page-kicker" id="dash-subtitle">Loading your season data...</p>
+    </div>
+    <a href="create_tournament.html" class="btn-lime"><i class="fa-solid fa-plus"></i>Create Tournament</a>
+  </div>
+
+  <section class="section-panel" id="next-match-panel" style="margin-bottom:1.25rem;">
+    <div class="panel-header">
+      <h2 class="panel-title">My Next Match</h2>
+      <a class="panel-link" href="tournaments.html">Fixtures</a>
+    </div>
+    <div id="next-match">
+      <div class="dash-row"><div style="flex:1"><div class="skeleton" style="width:40%;height:16px;margin-bottom:8px;"></div><div class="skeleton" style="width:72%;height:10px;"></div></div><div class="skeleton" style="width:120px;height:34px;"></div></div>
+    </div>
+  </section>
+
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-card skeleton-card skeleton"></div><div class="stat-card skeleton-card skeleton"></div><div class="stat-card skeleton-card skeleton"></div><div class="stat-card skeleton-card skeleton"></div>
+  </div>
+
+  <div class="content-sections-grid">
+    <section class="section-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">My Tournaments</h2>
+        <a class="panel-link" href="tournaments.html">Browse</a>
+      </div>
+      <div class="dashboard-list" id="my-tournaments"></div>
+    </section>
+
+    <section class="section-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Upcoming Matches</h2>
+        <a class="panel-link" href="matches.html">View Matches</a>
+      </div>
+      <div class="dashboard-list" id="upcoming-matches"></div>
+    </section>
+
+    <section class="section-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Recent Results</h2>
+        <a class="panel-link" href="profile.html">History</a>
+      </div>
+      <div class="dashboard-list" id="recent-results"></div>
+    </section>
+
+    <section class="section-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">Notifications</h2>
+        <a class="panel-link" href="notifications.html">View All</a>
+      </div>
+      <div class="dashboard-list" id="recent-notifications"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+  const esc = value => (window.KickoffUI && window.KickoffUI.escapeHtml ? window.KickoffUI.escapeHtml(value) : String(value ?? ""));
+  const rows = count => (window.KickoffUI && window.KickoffUI.skeletonRows ? window.KickoffUI.skeletonRows(count) : "");
+  ["my-tournaments", "upcoming-matches", "recent-results", "recent-notifications"].forEach(id => {
+    document.getElementById(id).innerHTML = rows(3);
+  });
+
+  function money(value) {
+    return Number(value || 0).toLocaleString("en", { maximumFractionDigits: 0 });
+  }
+
+  function empty(text) {
+    return `<div class="empty-state" style="min-height:96px;"><p>${esc(text)}</p></div>`;
+  }
+
+  function dashboardError(message) {
+    return `<div class="alert alert-error" style="display:block;margin:0;">
+      <div style="font-family:var(--font-ui);font-weight:800;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.35rem;">We couldn't load your dashboard.</div>
+      <div style="color:var(--text-soft);margin-bottom:.9rem;">${esc(message || "Check your session and try again.")}</div>
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap;">
+        <button type="button" class="btn-lime" onclick="location.reload()">Retry</button>
+        <button type="button" class="btn-ghost" onclick="refreshSession()">Refresh Session</button>
+      </div>
+    </div>`;
+  }
+
+  function statusBadge(status) {
+    const cls = status === "active" ? "badge-live" : status === "open" ? "badge-open" : status === "completed" ? "badge-win" : "badge-soon";
+    return `<span class="badge ${cls}">${esc(status || "queued")}</span>`;
+  }
+
+  function loadStats(user) {
+    const total = Number(user.total_matches || 0);
+    const rate = Number(user.win_rate || 0);
+    document.getElementById("stats-grid").innerHTML = `
+      <div class="stat-card"><span class="stat-value">${Number(user.wins || 0)}</span><span class="stat-label">Wins</span></div>
+      <div class="stat-card"><span class="stat-value">${Number(user.losses || 0)}</span><span class="stat-label">Losses</span></div>
+      <div class="stat-card"><span class="stat-label">Win Rate</span><div class="radial-box" style="--val:${rate};--accent:var(--primary);"><div class="radial-text">${rate}%</div></div></div>
+      <div class="stat-card"><span class="stat-value">${Number(user.points || 0)}</span><span class="stat-label">Points</span></div>
+    `;
+    document.getElementById("dash-name").textContent = user.username || "Player";
+    document.getElementById("dash-subtitle").textContent = `${esc(user.preferred_game || "Mobile football")} profile - ${total} total matches`;
+  }
+
+  function renderTournaments(items) {
+    const el = document.getElementById("my-tournaments");
+    if (!items || !items.length) { el.innerHTML = empty("No tournaments joined yet."); return; }
+    el.classList.add("tournament-card-grid");
+    el.innerHTML = items.map(t => KickoffTournamentCard.render(t, { variant: "compact", authenticated: true, currentUser: window.KickoffCurrentUser || null })).join("");
+  }
+
+  function renderMatches(items) {
+    const el = document.getElementById("upcoming-matches");
+    if (!items || !items.length) { el.innerHTML = empty("No match waiting right now."); return; }
+    el.innerHTML = items.map(m => `<a class="dash-row" href="submit_result.html?match_id=${Number(m.id)}" style="text-decoration:none;">
+      <div><div class="dash-row-title">vs ${esc(m.opponent_username)}</div><div class="dash-row-sub">${esc(m.tournament_name)} - Round ${Number(m.round_number || 1)}</div></div>
+      ${statusBadge(m.status)}
+    </a>`).join("");
+  }
+
+  function scheduleLabel(match) {
+    if (match.schedule_status === "confirmed") {
+      return match.proposed_start_utc ? `Confirmed: ${new Date(match.proposed_start_utc + "Z").toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : "Confirmed";
+    }
+    if (match.schedule_status === "proposed") return "Time proposed";
+    if (match.schedule_status === "rejected") return "Proposal rejected";
+    return match.scheduled_at ? new Date(match.scheduled_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Not scheduled";
+  }
+
+  function renderNextMatch(match) {
+    const el = document.getElementById("next-match");
+    if (!match) {
+      el.innerHTML = empty("No active fixture needs your attention.");
+      return;
+    }
+    const canWhatsApp = Number(match.opponent_whatsapp_available || 0) === 1;
+    el.innerHTML = `
+      <div class="dash-row" style="align-items:flex-start;gap:1rem;flex-wrap:wrap;">
+        <div style="min-width:220px;flex:1;">
+          <div class="dash-row-title">vs ${esc(match.opponent_username)}</div>
+          <div class="dash-row-sub">${esc(match.tournament_name)} - ${esc(match.game || "Game")} - Round ${Number(match.round_number || 1)}</div>
+          <div class="dash-row-sub">Fixture Series: ${esc(String(match.match_legs || "best_of_1").replace(/_/g, " "))} - Schedule: ${esc(scheduleLabel(match))}</div>
+          <div class="dash-row-sub">Result status: ${esc(match.status || "scheduled")}</div>
+          ${canWhatsApp ? "" : '<div class="dash-row-sub" style="color:var(--muted);">Opponent has not enabled WhatsApp contact.</div>'}
+        </div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;justify-content:flex-end;">
+          ${canWhatsApp ? `<a class="btn-lime" href="api/matches/contact_opponent.php?match_id=${Number(match.id)}" target="_blank" rel="noopener">Plan Match on WhatsApp</a>` : `<button class="btn-ghost" onclick="copyPreparedMessage(${Number(match.id)})">Copy Message</button>`}
+          <button class="btn-ghost" onclick="proposeMatchTime(${Number(match.id)})">Confirm Agreed Match Time</button>
+          <a class="btn-ghost" href="submit_result.html?match_id=${Number(match.id)}">Report Result</a>
+        </div>
+      </div>`;
+  }
+
+  window.copyPreparedMessage = async function (matchId) {
+    try {
+      const res = await fetch(`api/matches/contact_status.php?match_id=${encodeURIComponent(matchId)}`, { credentials: "same-origin" });
+      const data = await res.json();
+      const message = data.prepared_message || "Hello, we have been matched on KICKOFF. When are you available to play?";
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(message);
+        KickoffUI.toast("Prepared match message copied.", "success");
+      } else {
+        await KickoffUI.prompt({ title: "Copy Match Message", message, value: message, okText: "Done" });
+      }
+    } catch (error) {
+      KickoffUI.toast("Could not prepare the match message.", "error");
+    }
+  };
+
+  window.proposeMatchTime = async function (matchId) {
+    const date = await KickoffUI.prompt({ title: "Agreed Date", message: "Enter the agreed match date as YYYY-MM-DD.", okText: "Next", maxLength: 10 });
+    if (!date) return;
+    const time = await KickoffUI.prompt({ title: "Agreed Time", message: "Enter the agreed match time as HH:MM using 24-hour time.", okText: "Next", maxLength: 5 });
+    if (!time) return;
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Africa/Dar_es_Salaam";
+    const note = await KickoffUI.prompt({ title: "Optional Note", message: "Add any note for your opponent.", okText: "Submit", maxLength: 500 }) || "";
+    const res = await fetch("api/matches/schedule_propose.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ match_id: matchId, date, time, timezone, note })
+    });
+    const data = await res.json();
+    KickoffUI.toast(data.success ? "Match time proposed. Your opponent must confirm it." : (data.error || "Could not propose match time."), data.success ? "success" : "error");
+    if (data.success) location.reload();
+  };
+
+  function renderResults(items) {
+    const el = document.getElementById("recent-results");
+    if (!items || !items.length) { el.innerHTML = empty("Confirmed results will appear here."); return; }
+    el.innerHTML = items.map(r => {
+      const cls = r.result === "win" ? "badge-win" : r.result === "loss" ? "badge-loss" : "badge-draw";
+      return `<div class="dash-row">
+        <div><div class="dash-row-title">${esc(r.tournament_name)}</div><div class="dash-row-sub">vs ${esc(r.opponent_username)} - ${Number(r.player1_score)}:${Number(r.player2_score)}</div></div>
+        <span class="badge ${cls}">${esc(r.result)}</span>
+      </div>`;
+    }).join("");
+  }
+
+  function renderNotifications(items) {
+    const el = document.getElementById("recent-notifications");
+    if (!items || !items.length) { el.innerHTML = empty("No action required right now."); return; }
+    el.innerHTML = items.map(n => `<a class="dash-row" href="${esc(n.link_url || "notifications.html")}" style="text-decoration:none;">
+      <div><div class="dash-row-title">${esc(n.title)}</div><div class="dash-row-sub">${esc(n.body || "").slice(0, 96)}</div></div>
+      ${Number(n.is_read) ? "" : "<span class=\"badge badge-open\">New</span>"}
+    </a>`).join("");
+  }
+
+  async function init() {
+    try {
+      const res = await fetch("api/users/dashboard.php", { credentials: "same-origin" });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Unable to load dashboard.");
+      window.KickoffCurrentUser = data.user || null;
+      loadStats(data.user || {});
+      renderNextMatch(data.nextMatch || null);
+      renderTournaments(data.myTournaments || []);
+      renderMatches(data.upcomingMatches || []);
+      renderResults(data.recentResults || []);
+      renderNotifications(data.notifications || []);
+    } catch (error) {
+      document.getElementById("dash-subtitle").textContent = "Dashboard data could not be loaded.";
+      document.getElementById("next-match").innerHTML = dashboardError(error.message || "The dashboard API returned an invalid response.");
+      ["my-tournaments", "upcoming-matches", "recent-results", "recent-notifications"].forEach(id => {
+        document.getElementById(id).innerHTML = empty("Unable to load this section.");
+      });
+    }
+  }
+
+  window.refreshSession = async function () {
+    try {
+      const res = await fetch("api/users/session.php", { credentials: "same-origin" });
+      const data = await res.json();
+      if (!data.logged_in) {
+        window.location.href = "login.html?return_to=dashboard.html";
+        return;
+      }
+      location.reload();
+    } catch (error) {
+      KickoffUI.toast("Session refresh failed.", "error");
+    }
+  };
+
+  init();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,177 @@
+<?php require_once __DIR__ . '/includes/page_guard.php'; requireAdminPage(); ?>
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Disputes — KICKOFF Admin</title>
+<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="assets/css/page-overrides.css">
+
+<script src="assets/js/kickoff-ui.js"></script>
+<script src="includes/nav.js" data-page="admin_disputes" data-layout="admin"></script>
+</head>
+<body>
+
+<div class="admin-banner">⚠ Administrator Panel — Dispute Resolution Centre</div>
+<div id="page-main">
+    <div class="sec-tag">Fair Play Enforcement</div>
+    <h1 class="sec-title" style="margin-bottom:1.5rem;">Dispute <em>Resolution</em></h1>
+    <div class="tab-nav">
+      <button class="tab-btn active" onclick="switchTab(this,'open')">Open (<span id="open-count">0</span>)</button>
+      <button class="tab-btn" onclick="switchTab(this,'resolved')">Resolved</button>
+    </div>
+    <div class="tab-pane active" id="tab-open">
+      <div id="open-disputes"><div style="color:var(--muted);text-align:center;padding:2rem;">Loading disputes...</div></div>
+    </div>
+    <div class="tab-pane" id="tab-resolved">
+      <div id="resolved-disputes"><div style="color:var(--muted);text-align:center;padding:2rem;">Loading...</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+function timeAgo(dt) {
+  if (!dt) return '';
+  const diff = Math.floor((Date.now()-new Date(dt))/1000);
+  if (diff<60) return 'just now'; if (diff<3600) return Math.floor(diff/60)+'m ago';
+  if (diff<86400) return Math.floor(diff/3600)+'h ago'; return Math.floor(diff/86400)+'d ago';
+}
+
+async function init() {
+  const sRes  = await fetch('api/users/session.php');
+  const sData = await sRes.json();
+  if (!sData.logged_in || sData.user.role !== 'admin') { window.location.href = sData.logged_in ? 'dashboard.html' : 'login.html'; return; }
+  loadDisputes();
+}
+
+async function loadDisputes() {
+  const res  = await fetch('api/disputes/list.php');
+  const data = await res.json();
+  if (!data.success) return;
+
+  const openD     = data.open || [];
+  const resolvedD = data.resolved || [];
+
+  document.getElementById('open-count').textContent = openD.length;
+  if (openD.length > 0) {
+    document.getElementById('dispute-badge').textContent = openD.length;
+    document.getElementById('dispute-badge').style.display = 'inline';
+  }
+
+  // Render open disputes
+  document.getElementById('open-disputes').innerHTML = openD.length
+    ? openD.map(d => `
+        <div class="dispute-card" id="disp-${d.dispute_id}">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1.2rem;gap:1rem;flex-wrap:wrap;">
+            <div>
+              <div class="dc-id">DISP-${String(d.dispute_id).padStart(3,'0')} &nbsp;·&nbsp; ${d.tournament_name}</div>
+              <div class="dc-title">${d.player1_username} vs ${d.player2_username}</div>
+              <div class="dc-tour">⚠ ${d.reason||'Conflicting results submitted'}</div>
+            </div>
+            <div style="font-family:var(--font-b);font-size:.72rem;color:var(--muted);">${timeAgo(d.created_at)}</div>
+          </div>
+          <div class="claims-grid" id="claims-${d.dispute_id}">
+            <div class="claim-side"><div class="claim-player">Loading claim 1...</div></div>
+            <div class="claim-side"><div class="claim-player">Loading claim 2...</div></div>
+          </div>
+          <div class="verdict-area">
+            <div class="verdict-title">Admin Verdict</div>
+            <div class="verdict-btns">
+              <button class="vbtn vbtn-a" onclick="resolve(${d.dispute_id},'player1_wins')">Award Win → ${d.player1_username}</button>
+              <button class="vbtn vbtn-b" onclick="resolve(${d.dispute_id},'player2_wins')">Award Win → ${d.player2_username}</button>
+              ${d.allow_draw ? `<button class="vbtn vbtn-draw" onclick="resolve(${d.dispute_id},'draw')">Declare Draw</button>` : ""}
+              <button class="vbtn vbtn-replay" onclick="resolve(${d.dispute_id},'replay')">Require Replay</button>
+            </div>
+            <textarea class="form-input" id="note-${d.dispute_id}" placeholder="Optional: admin note to both players..." style="width:100%;min-height:60px;resize:none;font-size:.85rem;"></textarea>
+          </div>
+          <div class="resolved-overlay" id="overlay-${d.dispute_id}">
+            <div style="font-family:var(--font-b);font-size:.7rem;letter-spacing:.18em;text-transform:uppercase;color:var(--lime);margin-bottom:.3rem;">✓ Decision Recorded</div>
+            <div id="verdict-${d.dispute_id}" style="font-family:var(--font-b);font-size:.9rem;font-weight:700;"></div>
+          </div>
+        </div>`).join('')
+    : '<div style="text-align:center;padding:3rem;"><div style="font-size:2rem;margin-bottom:.8rem;">✅</div><div style="font-family:var(--font-b);font-size:.9rem;text-transform:uppercase;letter-spacing:.06em;color:var(--lime);">All disputes resolved</div></div>';
+
+  // Load match results for each dispute
+  for (const d of openD) {
+    loadMatchResults(d.match_id, d.dispute_id);
+  }
+
+  // Resolved
+  document.getElementById('resolved-disputes').innerHTML = resolvedD.length
+    ? resolvedD.map(d => `
+        <div class="resolved-row">
+          <div>
+            <div class="rr-id">DISP-${String(d.id).padStart(3,'0')} · ${d.tournament_name||''}</div>
+            <div class="rr-match">${d.player1_username} vs ${d.player2_username}</div>
+            <div class="rr-outcome">✓ ${d.outcome?.replace(/_/g,' ')}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span class="badge badge-win">Resolved</span>
+            <span style="font-family:var(--font-b);font-size:.7rem;color:var(--muted);">${timeAgo(d.resolved_at)}</span>
+          </div>
+        </div>`).join('')
+    : '<div style="color:var(--muted);text-align:center;padding:2rem;">No resolved disputes yet.</div>';
+}
+
+async function loadMatchResults(matchId, dispId) {
+  const res  = await fetch(`api/results/get.php?match_id=${matchId}`);
+  const data = await res.json();
+  if (!data.success) return;
+
+  const results = data.results || [];
+  const claimsEl = document.getElementById(`claims-${dispId}`);
+  if (!claimsEl) return;
+
+  const sides = [0,1].map(i => {
+    const r = results[i];
+    if (!r) return `<div class="claim-side"><div class="claim-player">No submission yet</div></div>`;
+    return `<div class="claim-side">
+      <div class="claim-player">${r.submitted_by_username} claims:</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:.6rem;">
+        <span class="claim-score" style="color:${r.claimed_result==='win'?'var(--lime)':'var(--fire)'};">${r.my_score} – ${r.opponent_score}</span>
+        <span class="badge badge-${r.claimed_result==='win'?'win':'loss'}">${r.claimed_result}</span>
+      </div>
+      ${r.screenshot_url ? `<div class="screenshot-box" onclick="window.open('${r.screenshot_url}','_blank')"><img src="${r.screenshot_url}" alt="Screenshot" onerror="this.parentElement.innerHTML='📸 Screenshot submitted (click to view)'"><div style="font-family:var(--font-b);font-size:.68rem;color:var(--cyan);margin-top:.4rem;letter-spacing:.1em;text-transform:uppercase;">Click to view full image</div></div>` : '<div class="screenshot-box">📸 No screenshot</div>'}
+      ${r.notes ? `<div class="claim-note">"${r.notes}"</div>` : ''}
+    </div>`;
+  });
+  claimsEl.innerHTML = sides.join('');
+}
+
+async function resolve(dispId, outcome) {
+  const note    = document.getElementById(`note-${dispId}`)?.value || '';
+  const overlay = document.getElementById(`overlay-${dispId}`);
+  const verdict = document.getElementById(`verdict-${dispId}`);
+
+  const ok = await KickoffUI.confirm({ title: 'Resolve Dispute', message: `Record ${outcome.replace(/_/g,' ')} as the final decision?`, okText: 'Resolve' });
+  if (!ok) return;
+  const res  = await fetch('api/disputes/resolve.php', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body: JSON.stringify({ dispute_id: dispId, outcome, admin_note: note }) });
+  const data = await res.json();
+
+  if (data.success) {
+    verdict.textContent = outcome.replace(/_/g,' ');
+    overlay.style.display = 'block';
+    const vArea = document.querySelector(`#disp-${dispId} .verdict-area`);
+    if (vArea) { vArea.style.opacity='.4'; vArea.style.pointerEvents='none'; }
+    // Update badge count
+    const badge = document.getElementById('dispute-badge');
+    const cnt   = parseInt(badge.textContent||'0') - 1;
+    badge.textContent = cnt;
+    if (cnt <= 0) badge.style.display = 'none';
+    document.getElementById('open-count').textContent = Math.max(0, parseInt(document.getElementById('open-count').textContent)-1);
+  } else {
+    KickoffUI.toast(data.error||'Could not resolve dispute', 'error');
+  }
+}
+
+function switchTab(btn, id) {
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-'+id).classList.add('active');
+}
+
+init();
+</script>
+</body>
+</html>

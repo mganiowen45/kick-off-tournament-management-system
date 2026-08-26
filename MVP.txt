@@ -1,0 +1,24 @@
+here is my mobile game tournament management system, to enable players to organize and participate in tournaments as they will be signed i to the system and be able to create/join tournaments. i need you to make some changes in the following parts.
+  1.Authorization
+-ensure all files that need a registered user to only allow registered user to access them by using session as currently, when a non-logged in user tries to access create-tournament.html the page loads and the contents are displayed for few seconds before redirecting the user to login page. so ensure pages iwth special access are strictly managed through session
+
+ 2.Share tournament button
+-Add a share tournament button which can be seen after user create a tournament or when user joins a tournament.
+
+ 3.Autocaching users info in (remember me) button as the system shoud remember users when they access the system through the device they use frequently. Because the ost users of this site are mobile gamers who use mobile phones so in order to reduce the time wasted in seeing the homepage then going to login form then entering their credentials, so user should directly logged in to their dashboards
+
+ 4.Mobile navigation 
+-a the most users of the website are mobile gamers, the website should have maximmum mobile application feeling so for this i made the bottom navigation for mobile users and static side bar for deskop users. but it turns out that in the current code the bottom navigation doesn't work properly as in dashboard.html(mobile users) the navbar appears at the center of the screen  and everything turns black, on other page  (mobile view) the navigation appears at the top instead of the page
+
+ 5.Components
+-mostly navigation componets as the most of pages when called does not have navigation as all, so navigation should be included when everypage is called by user.
+
+ 6.The design in the dashboard.html is the key design so while maintaining other fetures you should not distort the design in dashboard.html instead you should be looking up to it.
+
+ 7.removing the payment module
+-as am creating the MVP of my site, the payment module should not be includd at this early stage but it will be included on later versions. so in everypart that refer tothis module should be removed. like wallets and every options on it.
+
+ 8.Separation of admin and normal user pages.
+-Admin and users should have their own pages with proper authorization to ensure security and consistency of the contents delivered
+
+do these 8 thing and provide the zip with corrected code

@@ -1,0 +1,16 @@
+# Block ALL script execution in uploads directory
+Options -ExecCGI -Indexes
+AddHandler cgi-script .php .pl .py .sh .cgi
+<FilesMatch "\.(php|php3|php4|php5|phtml|pl|py|sh|cgi|shtml|phar)$">
+    Require all denied
+</FilesMatch>
+
+# Only allow image files
+<FilesMatch "\.(jpg|jpeg|png|webp|gif)$">
+    Require all granted
+</FilesMatch>
+
+# Block everything else
+<FilesMatch "^(?!.*\.(jpg|jpeg|png|webp|gif)$)">
+    Require all denied
+</FilesMatch>
