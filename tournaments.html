@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="assets/css/page-overrides.css">
 <link rel="stylesheet" href="assets/css/tournament-cards.css">
 <script src="assets/js/kickoff-ui.js"></script>
+<script src="assets/js/cover-image.js"></script>
 <script src="assets/js/tournament-card.js"></script>
 <script src="includes/nav.js" data-page="tournaments" data-layout="adaptive"></script>
 </head>
@@ -19,21 +20,32 @@
     <a href="create_tournament.html" class="btn-lime" id="create-tournament-link"><i class="fa-solid fa-plus"></i>Create Tournament</a>
   </div>
 
-  <div class="filters">
-    <button class="filter-btn active" onclick="setFilter(this,'format','')">All</button>
-    <button class="filter-btn" onclick="setFilter(this,'format','1v1')">1V1</button>
-    <button class="filter-btn" onclick="setFilter(this,'format','full_knockout')">Full Knockout</button>
-    <button class="filter-btn" onclick="setFilter(this,'format','group_knockout')">Group + Knockout</button>
-    <button class="filter-btn" id="btn-open" onclick="toggleStatus(this,'open')">Open</button>
-    <button class="filter-btn" id="btn-live" onclick="toggleStatus(this,'active')">Live</button>
-    <button class="filter-btn" id="btn-completed" onclick="toggleStatus(this,'completed')">Completed</button>
-    <button class="filter-btn" id="btn-free" onclick="togglePayment(this,'free')">Free</button>
-    <button class="filter-btn" id="btn-paid" onclick="togglePayment(this,'paid')">Paid</button>
-    <button class="filter-btn" id="btn-slots" onclick="toggleSlots(this)">Slots</button>
-    <select class="form-select form-input" id="filter-game" style="max-width:180px;" onchange="setSelectFilter('game_id',this.value)"></select>
-    <select class="form-select form-input" id="filter-platform" style="max-width:160px;" onchange="setSelectFilter('platform_id',this.value)"></select>
+  <div class="filters-toolbar" id="filters-toolbar">
     <div class="search-box">
-      <input type="text" id="search-input" placeholder="Search tournaments..." oninput="debounceSearch(this.value)">
+      <label class="sr-only" for="search-input">Search tournaments</label>
+      <input type="search" class="form-input" id="search-input" placeholder="Search tournaments..." oninput="debounceSearch(this.value)">
+    </div>
+    <button type="button" class="btn-ghost filters-toggle" id="filters-toggle" aria-expanded="false" aria-controls="filters-panel">
+      <i class="fa-solid fa-sliders" aria-hidden="true"></i> Filters
+    </button>
+    <div class="filters-panel filters" id="filters-panel">
+      <span class="form-label" style="width:100%;margin:0;">Format</span>
+      <button type="button" class="filter-btn active" onclick="setFilter(this,'format','')">All</button>
+      <button type="button" class="filter-btn" onclick="setFilter(this,'format','1v1')">1V1</button>
+      <button type="button" class="filter-btn" onclick="setFilter(this,'format','full_knockout')">Full Knockout</button>
+      <button type="button" class="filter-btn" onclick="setFilter(this,'format','group_knockout')">Group + Knockout</button>
+      <span class="form-label" style="width:100%;margin:var(--space-2) 0 0;">Status</span>
+      <button type="button" class="filter-btn" id="btn-open" onclick="toggleStatus(this,'open')">Open</button>
+      <button type="button" class="filter-btn" id="btn-live" onclick="toggleStatus(this,'active')">Live</button>
+      <button type="button" class="filter-btn" id="btn-completed" onclick="toggleStatus(this,'completed')">Completed</button>
+      <span class="form-label" style="width:100%;margin:var(--space-2) 0 0;">More</span>
+      <button type="button" class="filter-btn" id="btn-free" onclick="togglePayment(this,'free')">Free</button>
+      <button type="button" class="filter-btn" id="btn-paid" onclick="togglePayment(this,'paid')">Paid</button>
+      <button type="button" class="filter-btn" id="btn-slots" onclick="toggleSlots(this)">Open Slots</button>
+      <label class="sr-only" for="filter-game">Game</label>
+      <select class="form-select form-input" id="filter-game" style="max-width:180px;" onchange="setSelectFilter('game_id',this.value)"></select>
+      <label class="sr-only" for="filter-platform">Platform</label>
+      <select class="form-select form-input" id="filter-platform" style="max-width:160px;" onchange="setSelectFilter('platform_id',this.value)"></select>
     </div>
   </div>
 
@@ -123,6 +135,23 @@ function debounceSearch(val) {
   searchTimer = setTimeout(() => { filters.search = val; filters.page = 1; loadTournaments(); }, 400);
 }
 
+function clearTournamentFilters() {
+  filters = { format: "", status: "", search: "", page: 1, game_id: "", platform_id: "", payment: "", available_slots: "" };
+  document.getElementById("search-input").value = "";
+  document.querySelectorAll(".filters .filter-btn").forEach(b => b.classList.remove("active"));
+  document.querySelector(".filters .filter-btn")?.classList.add("active");
+  document.getElementById("filter-game").value = "";
+  document.getElementById("filter-platform").value = "";
+  loadTournaments();
+}
+
+document.getElementById("filters-toggle")?.addEventListener("click", () => {
+  const panel = document.getElementById("filters-panel");
+  const btn = document.getElementById("filters-toggle");
+  const open = panel.classList.toggle("is-open");
+  btn.setAttribute("aria-expanded", open ? "true" : "false");
+});
+
 async function loadTournaments() {
   const grid = document.getElementById("t-grid");
   grid.innerHTML = '<div class="empty-state"><p>Loading...</p></div>';
@@ -134,11 +163,15 @@ async function loadTournaments() {
   const res = await fetch("api/tournaments/list.php?" + params, { credentials: "same-origin" });
   const data = await res.json();
   if (!data.success || !data.tournaments.length) {
-    grid.innerHTML = '<div class="empty-state"><p>No tournaments found</p></div>';
+    grid.innerHTML = `<div class="empty-state">
+      <div class="empty-state-title">No tournaments found</div>
+      <p class="empty-state-body">There are no competitions matching your current filters.</p>
+      <button type="button" class="btn-secondary btn-sm" onclick="clearTournamentFilters()">Clear Filters</button>
+    </div>`;
     return;
   }
 
-  grid.innerHTML = data.tournaments.map(t => KickoffTournamentCard.render(t, { authenticated: Boolean(currentUser), currentUser })).join("");
+  grid.innerHTML = data.tournaments.map(t => KickoffTournamentCard.render(t, { variant: "banner", authenticated: Boolean(currentUser), currentUser })).join("");
 
   const pg = data.pagination || {};
   const pDiv = document.getElementById("pagination");

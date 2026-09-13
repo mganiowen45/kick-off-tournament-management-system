@@ -1,0 +1,106 @@
+/**
+ * KICKOFF design tokens — single source of truth.
+ * Legacy aliases (--bg, --lime, --font-b, etc.) map here for existing stylesheets.
+ */
+:root {
+  /* Color — surfaces */
+  --color-bg: #05080f;
+  --color-surface: #0b111a;
+  --color-surface-2: #111a26;
+  --color-surface-3: #162231;
+
+  /* Color — brand & semantic */
+  --color-primary: #ccff00;
+  --color-primary-muted: #9ee800;
+  --color-secondary: #00e5ff;
+  --color-success: #36d399;
+  --color-warning: #ffb020;
+  --color-danger: #ff4d4d;
+  --color-info: #00e5ff;
+
+  /* Color — text */
+  --color-text: #f7fbff;
+  --color-text-secondary: #c9d4e5;
+  --color-text-muted: #8290a8;
+
+  /* Color — borders */
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-strong: rgba(255, 255, 255, 0.14);
+
+  /* Spacing scale (px) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 48px;
+  --space-10: 64px;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+  --radius-full: 50%;
+
+  /* Typography */
+  --font-display: "Orbitron", sans-serif;
+  --font-ui: "Rajdhani", sans-serif;
+  --font-body: "Exo 2", sans-serif;
+
+  /* Effects */
+  --shadow-elevated: 0 22px 70px rgba(0, 0, 0, 0.38);
+  --glow-primary: 0 0 20px rgba(204, 255, 0, 0.18);
+  --glow-secondary: 0 0 20px rgba(0, 229, 255, 0.14);
+  --glow-focus: 0 0 0 3px rgba(204, 255, 0, 0.12);
+
+  /* Legacy aliases (do not add new usages — prefer --color-* / canonical names) */
+  --bg: var(--color-bg);
+  --bg-soft: #08111d;
+  --surface: rgba(13, 18, 29, 0.92);
+  --surface-2: var(--color-surface-2);
+  --panel: var(--color-surface);
+  --panel2: var(--color-surface-2);
+  --panel-strong: var(--color-surface-3);
+  --border: var(--color-border);
+  --border-strong: rgba(204, 255, 0, 0.22);
+  --text: var(--color-text);
+  --text-soft: var(--color-text-secondary);
+  --muted: var(--color-text-muted);
+  --primary: var(--color-primary);
+  --primary-2: var(--color-primary-muted);
+  --secondary: var(--color-secondary);
+  --danger: var(--color-danger);
+  --warning: var(--color-warning);
+  --success: var(--color-success);
+  --purple: #a78bfa;
+  --shadow: var(--shadow-elevated);
+  --radius: var(--radius-md);
+  --lime: var(--primary);
+  --lime2: #e2ff66;
+  --cyan: var(--secondary);
+  --fire: var(--danger);
+  --dark: var(--bg);
+  --darker: #02050b;
+  --card-bg: var(--panel);
+  --bg-color: var(--bg);
+  --border-color: var(--border);
+  --neon-lime: var(--primary);
+  --neon-lime-dark: var(--primary-2);
+  --cyan-accent: var(--secondary);
+  --text-main: var(--text);
+  --text-muted: var(--muted);
+  --border-w: var(--border);
+  --font-d: var(--font-display);
+  --font-b: var(--font-ui);
+  --font-t: var(--font-body);
+
+  /* RGB helpers for alpha overlays */
+  --primary-rgb: 204, 255, 0;
+  --secondary-rgb: 0, 229, 255;
+  --danger-rgb: 255, 77, 77;
+  --warning-rgb: 255, 176, 32;
+}

@@ -4,7 +4,6 @@
     return String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[ch]);
   };
 
-  const DEFAULT_COVER = "assets/tournament-covers/neon-stadium.svg";
   const formatLabels = {
     "1v1": "1V1 Tournament",
     full_knockout: "Full Knockout",
@@ -35,17 +34,8 @@
     return `${esc(currency || "TZS")} ${value.toLocaleString("en", { maximumFractionDigits: 0 })}`;
   }
 
-  function coverUrl(t) {
-    const raw = String(t.cover_image_url || t.cover_image_path || "").trim();
-    const path = raw || DEFAULT_COVER;
-    if (/^assets\/tournament-covers\/[-\w./%]+$/i.test(path)) return path;
-    if (/^\/?kickoff5\/assets\/tournament-covers\/[-\w./%]+$/i.test(path)) return path;
-    if (/^\/assets\/tournament-covers\/[-\w./%]+$/i.test(path)) return path;
-    return DEFAULT_COVER;
-  }
-
-  function cssCover(t) {
-    return coverUrl(t).replace(/['"\\\n\r)]/g, "");
+  function coverImg(t, className) {
+    return window.KickoffCoverImage.render(t, { className, seed: t.name });
   }
 
   function detailUrl(t) {
@@ -168,22 +158,43 @@
     return { label: "Join Tournament", kind: "join", loading: "Checking eligibility..." };
   }
 
+  const shortFormatLabels = {
+    "1v1": "1v1",
+    full_knockout: "Knockout",
+    group_knockout: "Group + KO"
+  };
+
   function metaItem(icon, value, label) {
     return `<div class="tc-meta-item"><i class="fa-solid ${icon}" aria-hidden="true"></i><div><strong>${esc(value)}</strong><span>${esc(label)}</span></div></div>`;
   }
 
-  function renderButton(action, t) {
+  function renderButton(action, t, opts) {
+    const id = Math.max(0, Math.trunc(number(t.id)));
+    const href = action.href || detailUrl(t);
+    const cls = opts && opts.className ? opts.className : "tc-action";
+    if (action.kind === "disabled") {
+      return `<button type="button" class="${cls}" disabled>${esc(action.label)}</button>`;
+    }
+    return `<button type="button" class="${cls} ${action.kind === "pay" ? "tc-action-pay" : ""}" data-loading-label="${attr(action.loading || "Opening...")}" onclick="KickoffTournamentCard.handleAction(event,this,'${attr(jsArg(action.kind))}',${id},'${attr(jsArg(href))}')">${esc(action.label)}</button>`;
+  }
+
+  function renderIconButton(action, t) {
     const id = Math.max(0, Math.trunc(number(t.id)));
     const href = action.href || detailUrl(t);
     if (action.kind === "disabled") {
-      return `<button type="button" class="tc-action" disabled>${esc(action.label)}</button>`;
+      return `<button type="button" class="tc-row-btn" disabled aria-label="${attr(action.label)}"><i class="fa-solid fa-lock" aria-hidden="true"></i></button>`;
     }
-    return `<button type="button" class="tc-action ${action.kind === "pay" ? "tc-action-pay" : ""}" data-loading-label="${attr(action.loading || "Opening...")}" onclick="KickoffTournamentCard.handleAction(event,this,'${attr(jsArg(action.kind))}',${id},'${attr(jsArg(href))}')">${esc(action.label)}</button>`;
+    return `<button type="button" class="tc-row-btn" data-loading-label="${attr(action.loading || "Opening...")}" aria-label="${attr(action.label)}" onclick="KickoffTournamentCard.handleAction(event,this,'${attr(jsArg(action.kind))}',${id},'${attr(jsArg(href))}')"><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>`;
   }
 
-  function render(t, options) {
-    const opts = Object.assign({ showActions: true, variant: "full", authenticated: false }, options || {});
-    const compact = opts.compact || opts.variant === "compact" || opts.variant === "dashboard";
+  function rowPrize(finance) {
+    if (finance.prizeValue && finance.prizeValue !== "NO CASH PRIZE") {
+      return { value: finance.prizeValue, label: "Prize" };
+    }
+    return { value: finance.entryValue || "FREE", label: "Entry" };
+  }
+
+  function renderHero(t, opts) {
     const pct = progress(t);
     const status = statusInfo(t);
     const finance = financeInfo(t);
@@ -196,9 +207,11 @@
     const current = number(t.current_players);
     const max = number(t.max_players);
 
-    return `<article class="tc-card ${compact ? "tc-card-compact" : ""}" style="--tc-cover:url('${attr(cssCover(t))}')">
+    return `<article class="tc-card">
       <a class="tc-hit" href="${attr(url)}" aria-label="View ${attr(title)}"></a>
       <div class="tc-hero">
+        ${coverImg(t)}
+        <div class="tc-hero-scrim" aria-hidden="true"></div>
         <div class="tc-rails" aria-hidden="true"></div>
         <div class="tc-badge-row">
           <span class="tc-pill ${formatClasses[t.format] || "tc-format-1v1"}">${esc(formatLabel)}</span>
@@ -217,11 +230,11 @@
           ${metaItem("fa-gamepad", game, "Game")}
           ${metaItem("fa-calendar", dateLabel(t), dateMetaLabel(t))}
         </div>
-        ${compact ? "" : `<div class="tc-finance">
+        <div class="tc-finance">
           <div><span>${esc(finance.prizeLabel)}</span><strong>${finance.prizeValue}</strong></div>
           <div><span>ENTRY</span><strong>${finance.entryValue}</strong></div>
         </div>
-        <div class="tc-funding">${esc(finance.note)}</div>`}
+        <div class="tc-funding">${esc(finance.note)}</div>
         <div class="tc-capacity">
           <div class="tc-capacity-top"><span>${current} / ${max || 0} SPOTS FILLED</span><strong>${pct}%</strong></div>
           <div class="tc-progress" aria-hidden="true"><div style="width:${pct}%;"></div></div>
@@ -229,6 +242,74 @@
         ${opts.showActions ? renderButton(action, t) : ""}
       </div>
     </article>`;
+  }
+
+  function renderBanner(t, opts) {
+    const pct = progress(t);
+    const status = statusInfo(t);
+    const finance = financeInfo(t);
+    const action = actionInfo(t, opts);
+    const url = detailUrl(t);
+    const formatLabel = t.format_label || formatLabels[t.format] || t.format || "Tournament";
+    const title = t.name || "Tournament";
+    const current = number(t.current_players);
+    const max = number(t.max_players);
+
+    return `<article class="tc-card tc-card-banner">
+      <a class="tc-hit" href="${attr(url)}" aria-label="View ${attr(title)}"></a>
+      <div class="tc-banner-cover">
+        ${coverImg(t)}
+        <div class="tc-hero-scrim" aria-hidden="true"></div>
+        <span class="tc-pill tc-banner-status ${status.cls}">${status.dot ? '<span class="live-dot"></span>' : ""}${esc(status.label)}</span>
+      </div>
+      <div class="tc-banner-body">
+        <div class="tc-banner-format">${esc(formatLabel)}</div>
+        <h3 class="tc-banner-title">${esc(title)}</h3>
+        <p class="tc-banner-host">Hosted by ${esc(t.creator_username || "KICKOFF")}</p>
+        <div class="tc-banner-divider"></div>
+        <div class="tc-banner-meta"><span>Players</span><strong>${current} / ${max || 0}</strong></div>
+        <div class="tc-progress" aria-hidden="true"><div style="width:${pct}%;"></div></div>
+        <div class="tc-banner-foot">
+          <div class="tc-banner-prize">${finance.prizeValue && finance.prizeValue !== "NO CASH PRIZE" ? finance.prizeValue : esc(finance.entryValue || "FREE")}</div>
+          ${opts.showActions ? renderButton(action, t, { className: "tc-banner-action" }) : ""}
+        </div>
+      </div>
+    </article>`;
+  }
+
+  function renderRow(t, opts) {
+    const status = statusInfo(t);
+    const finance = financeInfo(t);
+    const action = actionInfo(t, opts);
+    const url = detailUrl(t);
+    const shortFormat = shortFormatLabels[t.format] || t.format_label || t.format || "Tournament";
+    const title = t.name || "Tournament";
+    const current = number(t.current_players);
+    const max = number(t.max_players);
+    const prize = rowPrize(finance);
+    const statusText = status.dot ? "Live now" : `${esc(dateMetaLabel(t))} ${esc(dateLabel(t))}`;
+
+    return `<article class="tc-card tc-card-row">
+      <a class="tc-hit" href="${attr(url)}" aria-label="View ${attr(title)}"></a>
+      <div class="tc-row-thumb">${coverImg(t)}${status.dot ? '<span class="tc-row-live-dot" aria-hidden="true"></span>' : ""}</div>
+      <div class="tc-row-mid">
+        <div class="tc-row-title">${esc(title)}</div>
+        <div class="tc-row-sub"><span>${esc(shortFormat)}</span><span class="dot" aria-hidden="true"></span><span>${current}/${max || "–"} players</span><span class="dot" aria-hidden="true"></span><span>${statusText}</span></div>
+      </div>
+      <div class="tc-row-right">
+        <div class="tc-row-prize"><strong>${prize.value}</strong><span>${esc(prize.label)}</span></div>
+        ${opts.showActions ? renderIconButton(action, t) : ""}
+      </div>
+    </article>`;
+  }
+
+  function render(t, options) {
+    const opts = Object.assign({ showActions: true, variant: "hero", authenticated: false }, options || {});
+    let variant = opts.variant;
+    if (opts.compact || variant === "compact" || variant === "dashboard") variant = "row";
+    if (variant === "row") return renderRow(t, opts);
+    if (variant === "banner") return renderBanner(t, opts);
+    return renderHero(t, opts);
   }
 
   async function handleAction(event, button, kind, id, href) {
@@ -246,5 +327,5 @@
     }
   }
 
-  window.KickoffTournamentCard = { render, handleAction, money, progress, statusInfo, financeInfo, coverUrl };
+  window.KickoffTournamentCard = { render, handleAction, money, progress, statusInfo, financeInfo, coverUrl: t => window.KickoffCoverImage.coverUrl(t) };
 })();

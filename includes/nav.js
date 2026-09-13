@@ -26,10 +26,10 @@
   ];
 
   const adminLinks = [
-    { group: "OVERVIEW", items: [
+    { group: "MAIN", items: [
       ["admin_dashboard", "admin_dashboard.html", "fa-chart-line", "Dashboard"]
     ]},
-    { group: "COMPETITION", items: [
+    { group: "TOURNAMENTS", items: [
       ["admin_users", "admin_users.html", "fa-users-gear", "Users"],
       ["admin_tournaments", "admin_tournaments.html", "fa-shield-halved", "Tournaments"],
       ["admin_matches", "admin_matches.html", "fa-clipboard-check", "Matches & Results"],
@@ -134,7 +134,7 @@
       <div class="topbar-left">
         <button class="menu-toggle" type="button" aria-label="Toggle navigation"><i class="fa-solid fa-bars"></i></button>
         <a href="${isAdmin ? "admin_dashboard.html" : "dashboard.html"}" class="logo">KICK<span>OFF</span></a>
-        <span class="topbar-title">${isAdmin ? "Control Center" : "Player Hub"}</span>
+        <span class="topbar-title">${isAdmin ? "Admin" : "Dashboard"}</span>
       </div>
       <div class="topbar-right">
         <ul class="desktop-nav-links">
@@ -149,10 +149,10 @@
   function bottomNavMarkup(kind) {
     if (kind !== "player") return "";
     const items = [
-      ["dashboard", "dashboard.html", "fa-chart-simple", "Dashboard"],
+      ["dashboard", "dashboard.html", "fa-house", "Home"],
       ["tournaments", "tournaments.html", "fa-compass", "Discover"],
-      ["my_tournaments", "my_tournaments.html", "fa-list-check", "My"],
       ["matches", "matches.html", "fa-gamepad", "Matches"],
+      ["my_tournaments", "my_tournaments.html", "fa-list-check", "My"],
       ["profile", "profile.html", "fa-user", "Profile"]
     ];
     return `<nav class="bottom-nav" aria-label="Player mobile navigation">${items.map(([key, href, icon, label]) => `<a href="${href}" class="nav-item${active(key) ? " active" : ""}">
@@ -161,7 +161,7 @@
   }
 
   function footerMarkup(kind) {
-    return `<footer><p>Copyright 2026 KICKOFF Tournament Platform</p><p>${kind === "admin" ? "Operations Console" : "Tournament Operations"}</p></footer>`;
+    return `<footer><p>Copyright 2026 KICKOFF Tournament Platform</p><p>${kind === "admin" ? "Admin" : "Competitive Play"}</p></footer>`;
   }
 
   function wrapMain(kind) {

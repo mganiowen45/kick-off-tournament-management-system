@@ -27,10 +27,10 @@ $statusLabels = [
     'completed' => 'Completed',
     'cancelled' => 'Cancelled',
 ];
-$cover = trim((string) ($tournament['cover_image_url'] ?? $tournament['cover_image_path'] ?? ''));
-if (!preg_match('#^/?(kickoff5/)?assets/tournament-covers/[-\w./%]+$#i', $cover)) {
-    $cover = 'assets/tournament-covers/neon-stadium.svg';
-}
+$cover = \App\Support\CoverImage::resolve(
+    (string) ($tournament['cover_image_url'] ?? $tournament['cover_image_path'] ?? ''),
+    (string) ($tournament['name'] ?? '')
+);
 $id = (int) ($tournament['id'] ?? 0);
 $max = max(0, (int) $num($tournament['max_players'] ?? 0));
 $current = max(0, (int) $num($tournament['current_players'] ?? 0));
@@ -61,9 +61,12 @@ if ($funding === 'participant_funded') {
     $fundingNote = 'Free Casual Tournament';
 }
 ?>
-<article class="tc-card <?= $isCompact ? 'tc-card-compact' : '' ?>" style="--tc-cover:url('<?= $esc($cover) ?>')">
+<article class="tc-card <?= $isCompact ? 'tc-card-compact' : '' ?>">
   <a class="tc-hit" href="<?= $esc($href) ?>" aria-label="View <?= $esc($tournament['name'] ?? 'Tournament') ?>"></a>
   <div class="tc-hero">
+    <img class="tc-cover-img" src="<?= $esc($cover) ?>" alt="" loading="lazy"
+      onerror="this.onerror=null;this.classList.add('tc-cover-fallback');">
+    <div class="tc-hero-scrim" aria-hidden="true"></div>
     <div class="tc-rails" aria-hidden="true"></div>
     <div class="tc-badge-row">
       <span class="tc-pill <?= $esc($formatClasses[$format] ?? 'tc-format-1v1') ?>"><?= $esc($tournament['format_label'] ?? $formatLabels[$format] ?? $format) ?></span>

@@ -12,6 +12,7 @@ use App\Services\NotificationService;
 use App\Services\TournamentCatalogService;
 use App\Services\TournamentService;
 use App\Support\AvatarCatalog;
+use App\Support\CoverImage;
 use PDO;
 
 final class AdminController
@@ -211,26 +212,64 @@ final class AdminController
             Response::success([], 'Cover updated.');
         }
 
+        if ($action === 'delete') {
+            $id = $request->integer('id');
+            $stmt = $this->pdo->prepare('SELECT file_path FROM tournament_cover_images WHERE id = :id');
+            $stmt->execute([':id' => $id]);
+            $filePath = $stmt->fetchColumn();
+            if ($filePath === false) {
+                throw new HttpException('Cover not found.', 404);
+            }
+            $useCount = $this->pdo->prepare('SELECT COUNT(*) FROM tournaments WHERE cover_image_id = :id');
+            $useCount->execute([':id' => $id]);
+            if ((int) $useCount->fetchColumn() > 0) {
+                throw new HttpException('This cover is used by existing tournaments. Deactivate it instead of deleting it.', 422);
+            }
+            $this->pdo->prepare('DELETE FROM tournament_cover_images WHERE id = :id')->execute([':id' => $id]);
+            if (CoverImage::fileExists((string) $filePath)) {
+                @unlink(dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, (string) $filePath));
+            }
+            Response::success([], 'Cover deleted.');
+        }
+
         $id = $request->integer('id');
         $name = trim((string) $request->input('name', ''));
-        $category = trim((string) $request->input('category', 'Arena'));
-        $file = trim((string) $request->input('file_path', ''));
+        $category = trim((string) $request->input('category', ''));
         $sort = $request->integer('sort_order');
-        if ($name === '' || strlen($name) > 100 || $category === '' || strlen($category) > 60) {
-            throw new HttpException('Cover name and category are required.', 422);
+        if ($name === '' || strlen($name) > 100) {
+            throw new HttpException('Cover name is required.', 422);
         }
-        $file = TournamentCatalogService::normalizeCoverPath($file);
-        if ($file === '') {
-            throw new HttpException('Use a static cover from assets/tournament-covers: SVG, PNG, JPG, JPEG, or WEBP.', 422);
+        if (!in_array($category, TournamentCatalogService::COVER_CATEGORIES, true)) {
+            throw new HttpException('Choose a category from the list.', 422);
         }
-        if (!TournamentCatalogService::coverFileExists($file)) {
-            throw new HttpException('That cover file was not found under assets/tournament-covers.', 422);
+
+        $file = null;
+        if (!empty($_FILES['file']['name'] ?? '')) {
+            $file = $this->storeCatalogUpload(
+                $_FILES['file'],
+                dirname(__DIR__, 2) . '/assets/tournament-covers',
+                TournamentCatalogService::COVER_EXTENSIONS,
+                'cover'
+            );
+            $file = TournamentCatalogService::COVER_DIR . '/' . $file;
         }
+
         if ($id > 0) {
+            if ($file === null) {
+                $existing = $this->pdo->prepare('SELECT file_path FROM tournament_cover_images WHERE id = :id');
+                $existing->execute([':id' => $id]);
+                $file = $existing->fetchColumn();
+                if ($file === false) {
+                    throw new HttpException('Cover not found.', 404);
+                }
+            }
             $this->pdo->prepare(
                 'UPDATE tournament_cover_images SET name = :name, category = :category, file_path = :file, sort_order = :sort WHERE id = :id'
             )->execute([':name' => $name, ':category' => $category, ':file' => $file, ':sort' => $sort, ':id' => $id]);
         } else {
+            if ($file === null) {
+                throw new HttpException('Please choose an image to upload.', 422);
+            }
             $this->pdo->prepare(
                 'INSERT INTO tournament_cover_images (name, category, file_path, sort_order) VALUES (:name, :category, :file, :sort)'
             )->execute([':name' => $name, ':category' => $category, ':file' => $file, ':sort' => $sort]);
@@ -256,27 +295,114 @@ final class AdminController
             Response::success([], 'Avatar updated.');
         }
 
+        if ($action === 'delete') {
+            $id = $request->integer('id');
+            $stmt = $this->pdo->prepare('SELECT file_path FROM system_avatars WHERE id = :id');
+            $stmt->execute([':id' => $id]);
+            $filePath = $stmt->fetchColumn();
+            if ($filePath === false) {
+                throw new HttpException('Avatar not found.', 404);
+            }
+            $useCount = $this->pdo->prepare('SELECT COUNT(*) FROM users WHERE avatar_url = :file');
+            $useCount->execute([':file' => $filePath]);
+            if ((int) $useCount->fetchColumn() > 0) {
+                throw new HttpException('This avatar is currently selected by one or more players. Deactivate it instead of deleting it.', 422);
+            }
+            $this->pdo->prepare('DELETE FROM system_avatars WHERE id = :id')->execute([':id' => $id]);
+            $absolute = dirname(__DIR__, 2) . '/assets/avatars/' . basename((string) $filePath);
+            if (is_file($absolute)) {
+                @unlink($absolute);
+            }
+            Response::success([], 'Avatar deleted.');
+        }
+
         $id = $request->integer('id');
         $name = trim((string) $request->input('name', ''));
         $category = trim((string) $request->input('category', ''));
-        $file = basename(trim((string) $request->input('file_path', '')));
         $sort = $request->integer('sort_order');
         if ($name === '' || strlen($name) > 80 || !in_array($category, ['male_character','female_character','country_flag','club'], true)) {
             throw new HttpException('Avatar name and one of the four approved categories are required.', 422);
         }
-        if (!preg_match('/^[A-Za-z0-9._-]+\.svg$/', $file)) {
-            throw new HttpException('Avatar file must be an SVG filename from assets/avatars.', 422);
+
+        $file = null;
+        if (!empty($_FILES['file']['name'] ?? '')) {
+            $file = $this->storeCatalogUpload(
+                $_FILES['file'],
+                dirname(__DIR__, 2) . '/assets/avatars',
+                ['svg'],
+                'avatar'
+            );
         }
+
         if ($id > 0) {
+            if ($file === null) {
+                $existing = $this->pdo->prepare('SELECT file_path FROM system_avatars WHERE id = :id');
+                $existing->execute([':id' => $id]);
+                $file = $existing->fetchColumn();
+                if ($file === false) {
+                    throw new HttpException('Avatar not found.', 404);
+                }
+            }
             $this->pdo->prepare(
                 'UPDATE system_avatars SET name = :name, category = :category, file_path = :file, sort_order = :sort WHERE id = :id'
             )->execute([':name' => $name, ':category' => $category, ':file' => $file, ':sort' => $sort, ':id' => $id]);
         } else {
+            if ($file === null) {
+                throw new HttpException('Please choose an SVG file to upload.', 422);
+            }
             $this->pdo->prepare(
                 'INSERT INTO system_avatars (name, category, file_path, sort_order) VALUES (:name, :category, :file, :sort)'
             )->execute([':name' => $name, ':category' => $category, ':file' => $file, ':sort' => $sort]);
         }
         Response::success([], 'Avatar saved.');
+    }
+
+    /**
+     * Validate and move an uploaded catalog image ($_FILES entry) into an assets/ subfolder.
+     * Returns the generated filename (no directory prefix) on success.
+     */
+    private function storeCatalogUpload(array $file, string $absoluteDestDir, array $allowedExt, string $prefix): string
+    {
+        if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            throw new HttpException('Upload failed. Please try again.', 422);
+        }
+        if ((int) ($file['size'] ?? 0) > 5 * 1024 * 1024) {
+            throw new HttpException('File too large. Maximum size is 5MB.', 422);
+        }
+        $originalExt = strtolower(pathinfo((string) ($file['name'] ?? ''), PATHINFO_EXTENSION));
+        if (!in_array($originalExt, $allowedExt, true)) {
+            throw new HttpException('Unsupported file type. Allowed: ' . implode(', ', $allowedExt) . '.', 422);
+        }
+
+        $tmpName = (string) $file['tmp_name'];
+        if ($originalExt === 'svg') {
+            $contents = @file_get_contents($tmpName, false, null, 0, 200000);
+            if ($contents === false || !preg_match('/^\s*(<\?xml[^>]*>\s*)?<svg[\s>]/i', $contents)) {
+                throw new HttpException('That file is not a valid SVG.', 422);
+            }
+            if (preg_match('/<script|on\w+\s*=/i', $contents)) {
+                throw new HttpException('SVG files with embedded scripts are not allowed.', 422);
+            }
+        } else {
+            if (@getimagesize($tmpName) === false) {
+                throw new HttpException('That file is not a valid image.', 422);
+            }
+        }
+
+        if (!is_dir($absoluteDestDir) && !mkdir($absoluteDestDir, 0755, true) && !is_dir($absoluteDestDir)) {
+            throw new HttpException('Could not prepare the upload folder.', 500);
+        }
+
+        $slug = preg_replace('/[^a-z0-9]+/', '-', strtolower(pathinfo((string) ($file['name'] ?? ''), PATHINFO_FILENAME))) ?: $prefix;
+        $slug = trim((string) $slug, '-') ?: $prefix;
+        $filename = $slug . '-' . substr(bin2hex(random_bytes(4)), 0, 8) . '.' . $originalExt;
+        $destPath = rtrim($absoluteDestDir, '/') . '/' . $filename;
+
+        if (!move_uploaded_file($tmpName, $destPath)) {
+            throw new HttpException('Failed to save the uploaded file. Check server permissions.', 500);
+        }
+
+        return $filename;
     }
 
     public function cancellations(Request $request): never

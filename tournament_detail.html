@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="assets/css/page-overrides.css">
 <link rel="stylesheet" href="assets/css/tournament-cards.css">
 <script src="assets/js/kickoff-ui.js"></script>
+<script src="assets/js/cover-image.js"></script>
 <script src="assets/js/tournament-card.js"></script>
 <script src="includes/nav.js" data-page="tournament_detail" data-layout="adaptive"></script>
 </head>
@@ -69,12 +70,14 @@ async function load() {
   const canJoin = permissions.can_join === true;
   const canJoinAfterAuth = permissions.can_join_after_auth === true;
   const finance = KickoffTournamentCard.financeInfo(t);
-  const cover = KickoffTournamentCard.coverUrl(t);
+  const coverImgTag = KickoffCoverImage.render(t, { seed: t.name });
   const pendingPayment = ["pending", "failed"].includes(String(t.viewer_payment_status || "")) && t.pending_checkout_url;
   document.title = `${t.name} - KICKOFF`;
 
   document.getElementById("page-content").innerHTML = `
-    <div class="t-detail-hero" style="--tc-cover:url('${esc(cover)}')">
+    <div class="t-detail-hero">
+      ${coverImgTag}
+      <div class="tc-hero-scrim" aria-hidden="true"></div>
       <div class="t-hero-top">
         <div>
           <div class="t-badges">

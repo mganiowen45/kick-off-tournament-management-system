@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="assets/css/page-overrides.css">
 <link rel="stylesheet" href="assets/css/tournament-cards.css">
 <script src="assets/js/kickoff-ui.js"></script>
+<script src="assets/js/cover-image.js"></script>
 <script src="assets/js/tournament-card.js"></script>
 <script src="includes/nav.js" data-page="my_tournaments" data-layout="app"></script>
 </head>
@@ -28,7 +29,7 @@ async function load() {
   const data = await tournamentsRes.json();
   const uid = Number(session.user && session.user.id);
   const items = (data.tournaments || []).filter(t => t.joined === true || Number(t.creator_id) === uid);
-  document.getElementById("my-grid").innerHTML = items.length ? items.map(t => KickoffTournamentCard.render(t, { authenticated: true, currentUser: session.user })).join("") : `<div class="empty-state"><p>You have not joined a tournament yet.</p></div>`;
+  document.getElementById("my-grid").innerHTML = items.length ? items.map(t => KickoffTournamentCard.render(t, { variant: "banner", authenticated: true, currentUser: session.user })).join("") : `<div class="empty-state"><p>You have not joined a tournament yet.</p></div>`;
 }
 load();
 </script>

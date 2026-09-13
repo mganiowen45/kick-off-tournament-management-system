@@ -1,9 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" role="img" aria-label="World stage tournament cover">
-  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0a2530"/><stop offset=".55" stop-color="#153c3b"/><stop offset="1" stop-color="#28213d"/></linearGradient></defs>
-  <rect width="1200" height="675" fill="url(#g)"/>
-  <circle cx="600" cy="340" r="210" fill="none" stroke="#e7fff3" stroke-width="5" opacity=".55"/>
-  <path d="M390 340 H810 M600 130 V550" stroke="#e7fff3" stroke-width="4" opacity=".4"/>
-  <path d="M430 260 C520 185 668 190 780 268 C708 285 664 333 690 420 C590 448 486 412 430 260Z" fill="#b5f500" opacity=".82"/>
-  <path d="M390 400 C485 435 535 512 632 510 C710 508 762 460 810 405 C724 390 686 356 604 376 C520 396 468 386 390 400Z" fill="#00d9f5" opacity=".78"/>
-  <g fill="#ff4e7a"><circle cx="370" cy="165" r="14"/><circle cx="850" cy="180" r="12"/><circle cx="930" cy="475" r="14"/><circle cx="265" cy="460" r="12"/></g>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#0d1420"/><stop offset=".6" stop-color="#132030"/><stop offset="1" stop-color="#0f1c2c"/></linearGradient>
+    <radialGradient id="glow" cx="50%" cy="45%" r="55%"><stop stop-color="#00d9f5" stop-opacity=".32"/><stop offset="1" stop-color="#00d9f5" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="1200" height="675" fill="url(#bg)"/>
+  <circle cx="600" cy="330" r="290" fill="url(#glow)"/>
+  <circle cx="600" cy="330" r="200" fill="none" stroke="#e7fff3" stroke-width="4" opacity=".55"/>
+  <path d="M400 330 H800 M600 130 V530 M460 175 Q600 330 460 485 M740 175 Q600 330 740 485" fill="none" stroke="#e7fff3" stroke-width="3" opacity=".45"/>
+  <g fill="#b5f500">
+    <circle cx="230" cy="180" r="6"/><circle cx="980" cy="220" r="6"/><circle cx="150" cy="480" r="6"/><circle cx="1040" cy="470" r="6"/>
+  </g>
 </svg>

@@ -1,19 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" role="img" aria-label="Knockout bracket tournament cover">
-  <rect width="1200" height="675" fill="#111827"/>
-  <path d="M0 0 H1200 V675 H0 Z" fill="#16212f"/>
-  <g fill="none" stroke="#00d9f5" stroke-width="9" stroke-linecap="round" opacity=".9">
-    <path d="M170 150 H360 V245 H500"/>
-    <path d="M170 340 H360 V245"/>
-    <path d="M170 430 H360 V525 H500"/>
-    <path d="M170 615 H360 V525"/>
-    <path d="M500 245 H700 V338 H820"/>
-    <path d="M500 525 H700 V338"/>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#101820"/><stop offset=".5" stop-color="#161a2b"/><stop offset="1" stop-color="#1a1030"/></linearGradient>
+  </defs>
+  <rect width="1200" height="675" fill="url(#bg)"/>
+  <g stroke="#00d9f5" stroke-width="5" opacity=".75" fill="none">
+    <path d="M160 150 H340 V330"/>
+    <path d="M160 260 H260 V330"/>
+    <path d="M340 330 H520 V400"/>
   </g>
-  <g fill="#0f1724" stroke="#b5f500" stroke-width="5">
-    <rect x="100" y="116" width="150" height="68" rx="8"/><rect x="100" y="306" width="150" height="68" rx="8"/>
-    <rect x="100" y="396" width="150" height="68" rx="8"/><rect x="100" y="581" width="150" height="68" rx="8"/>
-    <rect x="470" y="211" width="150" height="68" rx="8"/><rect x="470" y="491" width="150" height="68" rx="8"/>
-    <rect x="810" y="304" width="190" height="76" rx="8"/>
+  <g stroke="#ff4e7a" stroke-width="5" opacity=".75" fill="none">
+    <path d="M160 470 H340 V330"/>
+    <path d="M160 550 H260 V470"/>
   </g>
-  <path d="M990 338 L1075 292 L1075 384 Z" fill="#b5f500"/>
+  <path d="M520 400 H700" stroke="#b5f500" stroke-width="6" opacity=".9"/>
+  <circle cx="740" cy="400" r="46" fill="#111827" stroke="#b5f500" stroke-width="7"/>
+  <path d="M786 400 H960" stroke="#e7fff3" stroke-width="4" opacity=".5"/>
 </svg>

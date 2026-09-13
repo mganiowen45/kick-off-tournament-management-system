@@ -10,29 +10,6 @@
 <script src="assets/js/kickoff-ui.js"></script>
 <script src="includes/nav.js" data-page="register" data-layout="auth"></script>
 
-<style>
-  /* Red border state for invalid fields */
-  .form-input.field-error,
-  .form-select.field-error {
-    border-color: #ff4e00 !important;
-    box-shadow: 0 0 0 2px rgba(255, 78, 0, 0.18) !important;
-  }
-  /* Restore normal focus ring as soon as user fixes the field */
-  .form-input.field-error:focus,
-  .form-select.field-error:focus {
-    border-color: var(--cyan, #00d9f5) !important;
-    box-shadow: 0 0 0 2px rgba(0, 217, 245, 0.18) !important;
-  }
-  .field-error-msg {
-    color: #ff4e00;
-    font-size: .75rem;
-    margin-top: 4px;
-    display: none;
-  }
-  .field-error-msg.visible {
-    display: block;
-  }
-</style>
 </head>
 <body>
 <div id="page-main">
@@ -297,7 +274,7 @@ function debounceCheckUsername(val) {
   // Correct length but illegal characters
   if (!/^[A-Za-z0-9_]{3,30}$/.test(val)) {
     hint.textContent = 'Only letters, numbers, underscores (3–30 chars)';
-    hint.style.color = '#ff4e00';
+    hint.style.color = 'var(--danger)';
     return;
   }
 
@@ -314,13 +291,13 @@ async function checkUsername(val) {
     const data = await res.json();
     if (data.message === 'Invalid format') {
       hint.textContent = '✗ Only letters, numbers, and underscores allowed (3–30 chars)';
-      hint.style.color = '#ff4e00';
+      hint.style.color = 'var(--danger)';
     } else if (data.available) {
       hint.textContent = '✓ Username is available and ready to use';
-      hint.style.color = '#b5f500';
+      hint.style.color = 'var(--primary)';
     } else {
       hint.textContent = '✗ This username is already in use';
-      hint.style.color = '#ff4e00';
+      hint.style.color = 'var(--danger)';
     }
   } catch { hint.textContent = 'Could not verify username'; }
 }
@@ -337,14 +314,14 @@ function checkStrength(val) {
   if (/[^A-Za-z0-9]/.test(val))  score++;
   const levels = [
     { w:'0%',   c:'transparent', t:'Enter a password' },
-    { w:'25%',  c:'#ff4e00',     t:'Weak' },
-    { w:'50%',  c:'#f5a623',     t:'Fair' },
-    { w:'75%',  c:'#00d9f5',     t:'Good' },
-    { w:'100%', c:'#b5f500',     t:'Strong ✓' }
+    { w:'25%',  c:'#ff4d4d',     t:'Weak' },
+    { w:'50%',  c:'#ffb020',     t:'Fair' },
+    { w:'75%',  c:'#00e5ff',     t:'Good' },
+    { w:'100%', c:'#ccff00',     t:'Strong ✓' }
   ];
   const l = levels[score];
   fill.style.width = l.w; fill.style.background = l.c;
-  label.textContent = l.t; label.style.color = score === 4 ? '#b5f500' : '';
+  label.textContent = l.t; label.style.color = score === 4 ? '#ccff00' : '';
 }
 
 // ─── Form submit ──────────────────────────────────────────────────────────────

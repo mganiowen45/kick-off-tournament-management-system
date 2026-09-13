@@ -26,8 +26,8 @@
 
 .tc-card:hover {
   transform: translateY(-2px);
-  border-color: rgba(204, 255, 0, 0.34);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.34), var(--glow-primary);
+  border-color: rgba(204, 255, 0, 0.28);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.34);
 }
 
 .tc-hit {
@@ -38,17 +38,56 @@
 
 .tc-hero {
   position: relative;
+  overflow: hidden;
   min-height: 230px;
   padding: 1rem;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  background: var(--tc-surface);
+}
+
+/* ===== Unified cover image layer (real <img>, not a CSS background) =====
+   Rendered by assets/js/cover-image.js. Sits behind the readability scrim
+   and the card content, which are explicitly z-index'd above it. Because
+   it's a real <img>, a failed load is visible/catchable via onerror,
+   instead of a CSS background-image silently disappearing. */
+.tc-cover-img {
+  display: block;
+  object-fit: cover;
+  object-position: center;
+}
+
+.tc-cover-img.tc-cover-fallback {
+  object-fit: contain;
+}
+
+.tc-hero > .tc-cover-img,
+.tc-card-banner .tc-banner-cover > .tc-cover-img,
+.tc-row-thumb > .tc-cover-img,
+.t-detail-hero > .tc-cover-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+.tc-hero > .tc-cover-img.tc-cover-fallback,
+.tc-card-banner .tc-banner-cover > .tc-cover-img.tc-cover-fallback,
+.t-detail-hero > .tc-cover-img.tc-cover-fallback {
+  padding: 12%;
+  background: var(--tc-surface);
+}
+
+.tc-hero-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   background-image:
     linear-gradient(180deg, rgba(4, 10, 19, 0.12) 0%, rgba(4, 10, 19, 0.18) 30%, rgba(4, 10, 19, 0.72) 72%, var(--tc-surface) 100%),
-    linear-gradient(90deg, rgba(4, 10, 19, 0.72) 0%, rgba(4, 10, 19, 0.12) 55%, rgba(4, 10, 19, 0.05) 100%),
-    var(--tc-cover);
-  background-size: cover;
-  background-position: center;
+    linear-gradient(90deg, rgba(4, 10, 19, 0.72) 0%, rgba(4, 10, 19, 0.12) 55%, rgba(4, 10, 19, 0.05) 100%);
+  pointer-events: none;
 }
 
 .tc-rails::before,
@@ -78,7 +117,8 @@
 .tc-title-wrap,
 .tc-mark,
 .tc-content,
-.tc-action {
+.tc-action,
+.tc-rails {
   position: relative;
   z-index: 2;
 }
@@ -387,22 +427,241 @@
   background: linear-gradient(90deg, rgba(0, 229, 255, 0.95), rgba(204, 255, 0, 0.88));
 }
 
-.tc-card-compact {
-  min-height: 410px;
+/* ===== Banner strip variant — standard browse grids (tournaments.html, my_tournaments.html) ===== */
+.tc-card-banner {
+  min-height: auto;
 }
 
-.tc-card-compact .tc-hero {
-  min-height: 190px;
+.tc-card-banner .tc-banner-cover {
+  position: relative;
+  overflow: hidden;
+  height: 130px;
+  background: var(--tc-surface);
 }
 
-.tc-card-compact .tc-mark,
-.tc-card-compact .tc-meta-item:nth-child(2),
-.tc-card-compact .tc-meta-item:nth-child(3) {
-  display: none;
+.tc-card-banner .tc-banner-cover > .tc-cover-img {
+  z-index: 0;
 }
 
-.tc-card-compact .tc-meta-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.tc-card-banner .tc-banner-cover > .tc-hero-scrim {
+  z-index: 1;
+  background-image: linear-gradient(180deg, rgba(4, 10, 19, 0) 55%, var(--tc-surface) 100%);
+}
+
+.tc-banner-status {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.7rem;
+  z-index: 2;
+}
+
+.tc-banner-body {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 1rem 1.1rem 1.1rem;
+  background: linear-gradient(180deg, var(--tc-surface), rgba(4, 8, 15, 0.98));
+}
+
+.tc-banner-format {
+  color: var(--secondary);
+  font-family: var(--font-ui);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.tc-banner-title {
+  margin: 0;
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.tc-banner-host {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+}
+
+.tc-banner-divider {
+  height: 1px;
+  background: rgba(148, 163, 184, 0.14);
+}
+
+.tc-banner-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-soft);
+  font-family: var(--font-ui);
+  font-size: 0.74rem;
+}
+
+.tc-banner-meta strong { color: #fff; }
+
+.tc-banner-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.tc-banner-prize {
+  color: var(--primary);
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 900;
+}
+
+.tc-banner-action {
+  width: auto;
+  min-height: 38px;
+  flex: 0 0 auto;
+  padding: 0 1rem;
+  border-radius: 4px;
+  border: 1px solid rgba(204, 255, 0, 0.66);
+  background: linear-gradient(90deg, rgba(204, 255, 0, 0.96), rgba(0, 229, 255, 0.86));
+  color: #061006;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.tc-banner-action:disabled {
+  color: var(--muted);
+  border-color: rgba(148, 163, 184, 0.18);
+  background: rgba(255, 255, 255, 0.035);
+  cursor: not-allowed;
+}
+
+/* ===== Compact row variant — dense lists (dashboard "My Tournaments" panel) ===== */
+.tc-card-row {
+  min-height: auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.6rem;
+  border-radius: 8px;
+}
+
+.tc-row-thumb {
+  position: relative;
+  overflow: hidden;
+  width: 68px;
+  height: 68px;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  background: var(--tc-surface);
+}
+
+.tc-row-thumb > .tc-cover-img {
+  border-radius: 6px;
+}
+
+.tc-row-live-dot {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: var(--glow-primary);
+}
+
+.tc-row-mid {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  min-width: 0;
+}
+
+.tc-row-title {
+  overflow: hidden;
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 0.92rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tc-row-sub {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow: hidden;
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 0.74rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tc-row-sub .dot {
+  width: 3px;
+  height: 3px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.tc-row-right {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex: 0 0 auto;
+}
+
+.tc-row-prize { text-align: right; }
+
+.tc-row-prize strong {
+  display: block;
+  color: var(--primary);
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
+.tc-row-prize span {
+  display: block;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tc-row-btn {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.03);
+  color: #fff;
+  cursor: pointer;
+}
+
+.tc-row-btn:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
 }
 
 .t-detail-hero {
@@ -412,13 +671,21 @@
   padding: clamp(1.2rem, 3vw, 2rem);
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 8px;
+  background: var(--tc-surface, #0b0f16);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.3);
+}
+
+.t-detail-hero > .tc-cover-img {
+  position: absolute;
+  z-index: 0;
+}
+
+.t-detail-hero > .tc-hero-scrim {
+  position: absolute;
+  z-index: 1;
   background-image:
     linear-gradient(180deg, rgba(4, 10, 19, 0.08) 0%, rgba(4, 10, 19, 0.24) 34%, rgba(4, 10, 19, 0.86) 100%),
-    linear-gradient(90deg, rgba(4, 10, 19, 0.76), rgba(4, 10, 19, 0.08)),
-    var(--tc-cover);
-  background-size: cover;
-  background-position: center;
-  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.3);
+    linear-gradient(90deg, rgba(4, 10, 19, 0.76), rgba(4, 10, 19, 0.08));
 }
 
 .t-detail-hero::before,

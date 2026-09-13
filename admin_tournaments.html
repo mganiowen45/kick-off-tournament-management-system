@@ -7,6 +7,7 @@
 <title>Tournament Control - KICKOFF Admin</title>
 <link rel="stylesheet" href="shared.css">
 <script src="assets/js/kickoff-ui.js"></script>
+<script src="assets/js/cover-image.js"></script>
 <script src="includes/nav.js" data-page="admin_tournaments" data-layout="admin"></script>
 </head>
 <body>
@@ -95,7 +96,7 @@
       return;
     }
     tbody.innerHTML = items.map(t => `<tr>
-      <td><div style="display:flex;gap:10px;align-items:center;"><img class="admin-thumb" src="${esc(t.cover_image_url || "assets/tournament-covers/neon-stadium.svg")}" alt=""><div><strong>${esc(t.name)}</strong><div class="text-muted">${esc(t.format)} - Round ${esc(t.current_round || 1)}</div></div></div></td>
+      <td><div style="display:flex;gap:10px;align-items:center;">${KickoffCoverImage.render(t, { className: "admin-thumb", seed: t.name })}<div><strong>${esc(t.name)}</strong><div class="text-muted">${esc(t.format)} - Round ${esc(t.current_round || 1)}</div></div></div></td>
       <td>${esc(t.creator_username || "Unknown")}</td>
       <td>${statusBadge(t.status)}</td>
       <td>${Number(t.current_players || 0)} / ${Number(t.max_players || 0)}</td>

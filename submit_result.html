@@ -16,6 +16,13 @@
   <div class="submit-layout">
     <div class="sec-tag">Match Verification</div>
     <h1 class="sec-title">Submit <em>Result</em></h1>
+    <ol class="submit-steps" aria-label="Submission steps">
+      <li class="is-active" id="step-match"><span>01</span> Match</li>
+      <li id="step-score"><span>02</span> Score</li>
+      <li id="step-result"><span>03</span> Result</li>
+      <li id="step-evidence"><span>04</span> Evidence</li>
+      <li id="step-submit"><span>05</span> Submit</li>
+    </ol>
     <div class="alert-error" id="submit-error"></div>
     <div class="match-banner" id="match-banner">
       <div>
@@ -33,7 +40,7 @@
     </div>
     <div id="submit-form" data-error-target="submit-error">
       <div class="form-group" style="margin-bottom:1.5rem;">
-        <label class="form-label">Select Match</label>
+        <label class="form-label" for="sel-match">Select Match</label>
         <select class="form-select form-input" id="sel-match" onchange="onMatchSelect(this)">
           <option value="">Loading your matches...</option>
         </select>
@@ -76,7 +83,7 @@
         <label class="form-label">Additional Notes (optional)</label>
         <textarea class="form-textarea form-input" id="notes" placeholder="Any comments about the match..."></textarea>
       </div>
-      <button class="btn-lime btn-full" onclick="submitResult()" style="margin-top:1rem;" id="submit-btn">Submit Result</button>
+      <button type="button" class="btn-primary btn-full" onclick="submitResult()" style="margin-top:1rem;" id="submit-btn">Submit Result</button>
     </div>
     <div class="success-screen" id="success-screen">
       <span class="success-icon"><i class="fa-solid fa-circle-check"></i></span>
@@ -121,10 +128,23 @@ async function init() {
   document.getElementById('match-me').textContent = currentUser.username;
 }
 
+function setSubmitStep(activeId) {
+  const order = ["step-match", "step-score", "step-result", "step-evidence", "step-submit"];
+  const activeIndex = order.indexOf(activeId);
+  order.forEach((id, index) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove("is-active", "is-done");
+    if (index < activeIndex) el.classList.add("is-done");
+    if (index === activeIndex) el.classList.add("is-active");
+  });
+}
+
 function onMatchSelect(sel) {
   const opt = sel.options[sel.selectedIndex];
   currentMatchId = sel.value;
   if (!sel.value) return;
+  setSubmitStep("step-score");
   document.getElementById('match-opp').textContent     = opt.dataset.opp;
   document.getElementById('match-tournament').textContent = opt.dataset.tour;
   document.getElementById('score-opp-label').textContent  = opt.dataset.opp;
@@ -139,11 +159,13 @@ function selectResult(r) {
   const cls = { win:'selected-win', draw:'selected-draw', loss:'selected-loss' };
   document.getElementById('btn-'+r).classList.add(cls[r]);
   selectedResult = r; document.getElementById('result-value').value = r;
+  setSubmitStep("step-evidence");
 }
 
 function updateResult() {
   const my  = parseInt(document.getElementById('my-score').value)  || 0;
   const opp = parseInt(document.getElementById('opp-score').value) || 0;
+  setSubmitStep("step-result");
   if (my > opp) selectResult('win');
   else if (my < opp) selectResult('loss');
   else selectResult('draw');
@@ -152,7 +174,12 @@ function updateResult() {
 function previewFile(input) {
   if (!input.files[0]) return;
   const reader = new FileReader();
-  reader.onload = e => { const img = document.getElementById('preview-img'); img.src = e.target.result; img.style.display = 'block'; };
+  reader.onload = e => {
+    const img = document.getElementById('preview-img');
+    img.src = e.target.result;
+    img.style.display = 'block';
+    setSubmitStep("step-submit");
+  };
   reader.readAsDataURL(input.files[0]);
 }
 function dragOver(e)  { e.preventDefault(); document.getElementById('upload-zone').classList.add('drag-over'); }

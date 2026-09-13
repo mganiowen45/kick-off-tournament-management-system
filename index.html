@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="assets/css/tournament-cards.css">
 
 <script src="assets/js/kickoff-ui.js"></script>
+<script src="assets/js/cover-image.js"></script>
 <script src="assets/js/tournament-card.js"></script>
 <script src="includes/nav.js" data-page="home" data-layout="public"></script>
 </head>
@@ -137,7 +138,7 @@
 
 <script>
 const avColors = ['rgba(255,78,0,.1)','rgba(0,217,245,.1)','rgba(181,245,0,.08)','rgba(245,166,35,.1)','rgba(181,100,255,.1)'];
-const avTColors = ['#ff4e00','#00d9f5','#b5f500','#f5a623','#b564ff'];
+const avTColors = ['#ff4d4d','#00e5ff','#ccff00','#ffb020','#a78bfa'];
 const esc = value => KickoffUI.escapeHtml(value);
 
 function gameImageFallback(img) {
@@ -198,7 +199,7 @@ function gameImageFallback(img) {
 
     if (!all.length) { grid.innerHTML = '<div style="padding:2rem;color:var(--muted);font-size:.84rem;">No tournaments found. <a href="create_tournament.html" style="color:var(--lime);">Create the first one →</a></div>'; return; }
 
-    grid.innerHTML = all.map(t => KickoffTournamentCard.render(t, { variant: "compact", authenticated: false })).join('');
+    grid.innerHTML = all.map(t => KickoffTournamentCard.render(t, { variant: "hero", authenticated: false })).join('');
 
     // Update hero stats
     document.getElementById('stat-tournaments').textContent = all.filter(t=>t.status==='active').length || data.pagination?.total || '–';

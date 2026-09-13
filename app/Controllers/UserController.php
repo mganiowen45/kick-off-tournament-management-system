@@ -11,6 +11,7 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Services\TournamentCatalogService;
 use App\Support\AvatarCatalog;
+use App\Support\CoverImage;
 use PDO;
 use PDOException;
 
@@ -368,7 +369,7 @@ final class UserController
             'user' => $user,
             'myTournaments' => array_map(static function (array $row): array {
                 $row['joined'] = (bool) $row['joined'];
-                $row['cover_image_url'] = TournamentCatalogService::resolveCoverPath($row['cover_image_url'] ?? null);
+                $row['cover_image_url'] = CoverImage::resolve($row['cover_image_url'] ?? null, (string) ($row['name'] ?? ''));
                 $row['cover_image_path'] = $row['cover_image_url'];
                 $row['format_label'] = TournamentCatalogService::formatLabel($row['format'] ?? '');
                 $row['funding_label'] = TournamentCatalogService::fundingLabel($row['funding_model'] ?? '');

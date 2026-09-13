@@ -3,15 +3,17 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Support\CoverImage;
 use PDO;
 
 final class TournamentCatalogService
 {
-    public const COVER_DIR = 'assets/tournament-covers';
-    public const DEFAULT_COVER = 'assets/tournament-covers/neon-stadium.svg';
-    public const COVER_EXTENSIONS = ['svg', 'png', 'jpg', 'jpeg', 'webp'];
+    public const COVER_DIR = CoverImage::COVER_DIR;
+    public const COVER_EXTENSIONS = CoverImage::ALLOWED_EXTENSIONS;
 
     public const FORMATS = ['1v1', 'full_knockout', 'group_knockout'];
+
+    public const COVER_CATEGORIES = ['Arena', 'Stadium', 'Bracket', 'Console', 'Mobile', 'World Stage', 'Neon', 'General'];
 
     public const FORMAT_LABELS = [
         '1v1' => '1V1 Tournament',
@@ -54,6 +56,7 @@ final class TournamentCatalogService
         )->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /** Active covers available for the "choose a cover" picker in tournament creation. */
     public function covers(): array
     {
         $this->syncCovers();
@@ -61,11 +64,12 @@ final class TournamentCatalogService
             "SELECT id, name, category, file_path FROM tournament_cover_images
              WHERE is_active = 1 ORDER BY sort_order ASC, name ASC"
         )->fetchAll(PDO::FETCH_ASSOC);
-        return array_values(array_filter(array_map(function (array $row): array {
-            if (!self::coverFileExists((string) $row['file_path'])) {
-                return [];
+        // Only offer covers that genuinely exist on disk - no point letting someone
+        // pick a cover that would immediately need a placeholder.
+        return array_values(array_filter(array_map(static function (array $row): ?array {
+            if (!CoverImage::fileExists((string) $row['file_path'])) {
+                return null;
             }
-            $row['file_path'] = self::resolveCoverPath((string) $row['file_path']);
             $row['asset_missing'] = false;
             return $row;
         }, $rows)));
@@ -91,12 +95,13 @@ final class TournamentCatalogService
         $stmt = $this->pdo->prepare('SELECT file_path FROM tournament_cover_images WHERE id = :id AND is_active = 1 LIMIT 1');
         $stmt->execute([':id' => $id]);
         $path = $stmt->fetchColumn();
-        return $path !== false && self::coverFileExists((string) $path);
+        return $path !== false && CoverImage::fileExists((string) $path);
     }
 
+    /** Picks up any image files dropped into assets/tournament-covers/ that aren't in the DB yet. */
     public function syncCovers(): void
     {
-        $dir = self::coverDirectoryAbsolute();
+        $dir = $this->coverDirectoryAbsolute();
         if (!is_dir($dir)) return;
         $maxSort = (int) ($this->pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM tournament_cover_images')->fetchColumn() ?: 0);
         $insert = $this->pdo->prepare(
@@ -107,8 +112,8 @@ final class TournamentCatalogService
         sort($files, SORT_NATURAL | SORT_FLAG_CASE);
         foreach ($files as $file) {
             if ($file === '.' || $file === '..') continue;
-            $path = self::normalizeCoverPath(self::COVER_DIR . '/' . $file);
-            if ($path === '' || !self::coverFileExists($path)) continue;
+            $path = CoverImage::COVER_DIR . '/' . $file;
+            if (!CoverImage::fileExists($path)) continue;
             $maxSort += 10;
             $insert->execute([
                 ':name' => self::humanName(pathinfo($file, PATHINFO_FILENAME)),
@@ -119,6 +124,11 @@ final class TournamentCatalogService
         }
     }
 
+    /**
+     * Full cover catalog for the admin management screen, including rows whose
+     * files are missing. `asset_missing` lets the admin UI flag those clearly
+     * instead of silently substituting something else and hiding the problem.
+     */
     public function allCoversForAdmin(): array
     {
         $this->syncCovers();
@@ -126,42 +136,20 @@ final class TournamentCatalogService
             'SELECT * FROM tournament_cover_images ORDER BY is_active DESC, sort_order ASC, name ASC'
         )->fetchAll(PDO::FETCH_ASSOC);
         return array_map(static function (array $row): array {
-            $row['asset_missing'] = !self::coverFileExists((string) $row['file_path']);
-            $row['resolved_file_path'] = self::resolveCoverPath((string) $row['file_path']);
+            $missing = !CoverImage::fileExists((string) $row['file_path']);
+            $row['asset_missing'] = $missing;
+            // Preview exactly what a player would see for this cover: the real
+            // file if present, or the same generated placeholder as everywhere else.
+            $row['resolved_file_path'] = $missing
+                ? CoverImage::placeholderDataUri((string) $row['name'])
+                : (string) $row['file_path'];
             return $row;
         }, $rows);
     }
 
-    public static function resolveCoverPath(?string $path): string
+    private function coverDirectoryAbsolute(): string
     {
-        $normalized = self::normalizeCoverPath((string) $path);
-        return $normalized !== '' && self::coverFileExists($normalized) ? $normalized : self::DEFAULT_COVER;
-    }
-
-    public static function coverFileExists(string $path): bool
-    {
-        $normalized = self::normalizeCoverPath($path);
-        if ($normalized === '') return false;
-        $absolute = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $normalized);
-        $realFile = realpath($absolute);
-        $realDir = realpath(self::coverDirectoryAbsolute());
-        return $realFile !== false && $realDir !== false && str_starts_with($realFile, $realDir . DIRECTORY_SEPARATOR) && is_file($realFile);
-    }
-
-    public static function normalizeCoverPath(string $path): string
-    {
-        $path = trim(str_replace('\\', '/', $path));
-        $path = preg_replace('#/+#', '/', $path) ?? '';
-        if (!preg_match('#^assets/tournament-covers/[A-Za-z0-9._-]+\.(svg|png|jpe?g|webp)$#i', $path)) {
-            return '';
-        }
-        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-        return in_array($ext, self::COVER_EXTENSIONS, true) ? $path : '';
-    }
-
-    private static function coverDirectoryAbsolute(): string
-    {
-        return dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, self::COVER_DIR);
+        return dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, CoverImage::COVER_DIR);
     }
 
     private static function humanName(string $name): string

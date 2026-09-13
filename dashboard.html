@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="shared.css">
 <link rel="stylesheet" href="assets/css/tournament-cards.css">
 <script src="assets/js/kickoff-ui.js"></script>
+<script src="assets/js/cover-image.js"></script>
 <script src="assets/js/tournament-card.js"></script>
 <script src="includes/nav.js" data-page="dashboard" data-layout="app"></script>
 </head>
@@ -22,10 +23,10 @@
     <a href="create_tournament.html" class="btn-lime"><i class="fa-solid fa-plus"></i>Create Tournament</a>
   </div>
 
-  <section class="section-panel" id="next-match-panel" style="margin-bottom:1.25rem;">
+  <section class="section-panel card-featured next-match-panel" id="next-match-panel" style="margin-bottom:1.25rem;">
     <div class="panel-header">
-      <h2 class="panel-title">My Next Match</h2>
-      <a class="panel-link" href="tournaments.html">Fixtures</a>
+      <h2 class="panel-title">Your Next Match</h2>
+      <a class="panel-link" href="matches.html">All Matches</a>
     </div>
     <div id="next-match">
       <div class="dash-row"><div style="flex:1"><div class="skeleton" style="width:40%;height:16px;margin-bottom:8px;"></div><div class="skeleton" style="width:72%;height:10px;"></div></div><div class="skeleton" style="width:120px;height:34px;"></div></div>
@@ -83,8 +84,14 @@
     return Number(value || 0).toLocaleString("en", { maximumFractionDigits: 0 });
   }
 
-  function empty(text) {
-    return `<div class="empty-state" style="min-height:96px;"><p>${esc(text)}</p></div>`;
+  function empty(title, body, actionHtml) {
+    const t = title || "Nothing here yet";
+    const b = body || "";
+    return `<div class="empty-state empty-state-compact">
+      <div class="empty-state-title">${esc(t)}</div>
+      ${b ? `<p class="empty-state-body">${esc(b)}</p>` : ""}
+      ${actionHtml || ""}
+    </div>`;
   }
 
   function dashboardError(message) {
@@ -118,14 +125,19 @@
 
   function renderTournaments(items) {
     const el = document.getElementById("my-tournaments");
-    if (!items || !items.length) { el.innerHTML = empty("No tournaments joined yet."); return; }
-    el.classList.add("tournament-card-grid");
-    el.innerHTML = items.map(t => KickoffTournamentCard.render(t, { variant: "compact", authenticated: true, currentUser: window.KickoffCurrentUser || null })).join("");
+    if (!items || !items.length) {
+      el.innerHTML = empty("No tournaments yet", "Join a competition from Discover to see it here.", `<a class="btn-secondary btn-sm" href="tournaments.html">Discover Tournaments</a>`);
+      return;
+    }
+    el.innerHTML = items.map(t => KickoffTournamentCard.render(t, { variant: "row", authenticated: true, currentUser: window.KickoffCurrentUser || null })).join("");
   }
 
   function renderMatches(items) {
     const el = document.getElementById("upcoming-matches");
-    if (!items || !items.length) { el.innerHTML = empty("No match waiting right now."); return; }
+    if (!items || !items.length) {
+      el.innerHTML = empty("No upcoming matches", "When you are scheduled to play, fixtures appear here.", `<a class="btn-secondary btn-sm" href="tournaments.html">Discover Tournaments</a>`);
+      return;
+    }
     el.innerHTML = items.map(m => `<a class="dash-row" href="submit_result.html?match_id=${Number(m.id)}" style="text-decoration:none;">
       <div><div class="dash-row-title">vs ${esc(m.opponent_username)}</div><div class="dash-row-sub">${esc(m.tournament_name)} - Round ${Number(m.round_number || 1)}</div></div>
       ${statusBadge(m.status)}
@@ -144,23 +156,29 @@
   function renderNextMatch(match) {
     const el = document.getElementById("next-match");
     if (!match) {
-      el.innerHTML = empty("No active fixture needs your attention.");
+      el.innerHTML = empty(
+        "No upcoming match",
+        "You do not have an active fixture that needs action right now.",
+        `<a class="btn-primary btn-sm" href="tournaments.html">Discover Tournaments</a>`
+      );
       return;
     }
     const canWhatsApp = Number(match.opponent_whatsapp_available || 0) === 1;
+    const primaryCta = match.status === "pending_result" || match.status === "in_progress"
+      ? `<a class="btn-primary" href="submit_result.html?match_id=${Number(match.id)}">Record Result</a>`
+      : `<a class="btn-primary" href="submit_result.html?match_id=${Number(match.id)}">View Match</a>`;
     el.innerHTML = `
-      <div class="dash-row" style="align-items:flex-start;gap:1rem;flex-wrap:wrap;">
-        <div style="min-width:220px;flex:1;">
-          <div class="dash-row-title">vs ${esc(match.opponent_username)}</div>
-          <div class="dash-row-sub">${esc(match.tournament_name)} - ${esc(match.game || "Game")} - Round ${Number(match.round_number || 1)}</div>
-          <div class="dash-row-sub">Fixture Series: ${esc(String(match.match_legs || "best_of_1").replace(/_/g, " "))} - Schedule: ${esc(scheduleLabel(match))}</div>
-          <div class="dash-row-sub">Result status: ${esc(match.status || "scheduled")}</div>
-          ${canWhatsApp ? "" : '<div class="dash-row-sub" style="color:var(--muted);">Opponent has not enabled WhatsApp contact.</div>'}
+      <div class="next-match-body">
+        <div class="next-match-meta">
+          <div class="dash-row-title">${esc(match.tournament_name)} · Round ${Number(match.round_number || 1)}</div>
+          <div class="dash-row-sub">You vs ${esc(match.opponent_username)} · ${esc(match.game || "Game")}</div>
+          <div class="dash-row-sub">Schedule: ${esc(scheduleLabel(match))} · Status: ${esc(match.status || "scheduled")}</div>
+          ${canWhatsApp ? "" : '<div class="dash-row-sub text-muted">Opponent has not enabled WhatsApp contact.</div>'}
         </div>
-        <div style="display:flex;gap:.5rem;flex-wrap:wrap;justify-content:flex-end;">
-          ${canWhatsApp ? `<a class="btn-lime" href="api/matches/contact_opponent.php?match_id=${Number(match.id)}" target="_blank" rel="noopener">Plan Match on WhatsApp</a>` : `<button class="btn-ghost" onclick="copyPreparedMessage(${Number(match.id)})">Copy Message</button>`}
-          <button class="btn-ghost" onclick="proposeMatchTime(${Number(match.id)})">Confirm Agreed Match Time</button>
-          <a class="btn-ghost" href="submit_result.html?match_id=${Number(match.id)}">Report Result</a>
+        <div class="next-match-actions">
+          ${primaryCta}
+          ${canWhatsApp ? `<a class="btn-secondary btn-sm" href="api/matches/contact_opponent.php?match_id=${Number(match.id)}" target="_blank" rel="noopener">WhatsApp</a>` : `<button type="button" class="btn-ghost btn-sm" onclick="copyPreparedMessage(${Number(match.id)})">Copy Message</button>`}
+          <button type="button" class="btn-ghost btn-sm" onclick="proposeMatchTime(${Number(match.id)})">Schedule Match</button>
         </div>
       </div>`;
   }
@@ -200,7 +218,10 @@
 
   function renderResults(items) {
     const el = document.getElementById("recent-results");
-    if (!items || !items.length) { el.innerHTML = empty("Confirmed results will appear here."); return; }
+    if (!items || !items.length) {
+      el.innerHTML = empty("No recent results", "Confirmed match results will show here after you play.");
+      return;
+    }
     el.innerHTML = items.map(r => {
       const cls = r.result === "win" ? "badge-win" : r.result === "loss" ? "badge-loss" : "badge-draw";
       return `<div class="dash-row">
@@ -212,7 +233,10 @@
 
   function renderNotifications(items) {
     const el = document.getElementById("recent-notifications");
-    if (!items || !items.length) { el.innerHTML = empty("No action required right now."); return; }
+    if (!items || !items.length) {
+      el.innerHTML = empty("All caught up", "Notifications that need your attention will appear here.");
+      return;
+    }
     el.innerHTML = items.map(n => `<a class="dash-row" href="${esc(n.link_url || "notifications.html")}" style="text-decoration:none;">
       <div><div class="dash-row-title">${esc(n.title)}</div><div class="dash-row-sub">${esc(n.body || "").slice(0, 96)}</div></div>
       ${Number(n.is_read) ? "" : "<span class=\"badge badge-open\">New</span>"}
@@ -235,7 +259,7 @@
       document.getElementById("dash-subtitle").textContent = "Dashboard data could not be loaded.";
       document.getElementById("next-match").innerHTML = dashboardError(error.message || "The dashboard API returned an invalid response.");
       ["my-tournaments", "upcoming-matches", "recent-results", "recent-notifications"].forEach(id => {
-        document.getElementById(id).innerHTML = empty("Unable to load this section.");
+        document.getElementById(id).innerHTML = empty("Could not load", "Try refreshing the page.");
       });
     }
   }

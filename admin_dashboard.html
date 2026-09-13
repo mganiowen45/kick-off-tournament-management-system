@@ -114,7 +114,7 @@ async function init() {
 
   // Activity
   document.getElementById('activity-log').innerHTML = (data.activity||[]).map(a => {
-    const dotColor = a.type==='dispute_raised'?'var(--fire)':a.type==='new_user'?'#00d9f5':'#b5f500';
+    const dotColor = a.type==='dispute_raised'?'var(--danger)':a.type==='new_user'?'var(--secondary)':'var(--primary)';
     return `<div class="act-item"><div class="a-dot" style="background:${dotColor};"></div><div class="a-txt">${a.detail}</div><div class="a-t">${timeAgo(a.time)}</div></div>`;
   }).join('') || '<div style="color:var(--muted);font-size:.82rem;">No recent activity</div>';
 }

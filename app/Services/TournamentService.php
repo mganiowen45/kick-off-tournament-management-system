@@ -6,6 +6,7 @@ namespace App\Services;
 use App\Core\Database;
 use App\Core\HttpException;
 use App\Support\AvatarCatalog;
+use App\Support\CoverImage;
 use DateTimeImmutable;
 use PDO;
 use PDOException;
@@ -212,7 +213,7 @@ final class TournamentService
                 unset($row['share_token']);
             }
             $row['joined'] = (bool) $row['joined'];
-            $row['cover_image_url'] = TournamentCatalogService::resolveCoverPath($row['cover_image_url'] ?? null);
+            $row['cover_image_url'] = CoverImage::resolve($row['cover_image_url'] ?? null, (string) ($row['name'] ?? ''));
             $row['cover_image_path'] = $row['cover_image_url'];
             $row['format_label'] = TournamentCatalogService::formatLabel($row['format'] ?? '');
             $row['funding_label'] = TournamentCatalogService::fundingLabel($row['funding_model'] ?? '');
@@ -270,7 +271,7 @@ final class TournamentService
         }
         unset($tournament['share_token_hash']);
         $tournament = array_merge($tournament, $viewerTournamentState);
-        $tournament['cover_image_url'] = TournamentCatalogService::resolveCoverPath($tournament['cover_image_url'] ?? null);
+        $tournament['cover_image_url'] = CoverImage::resolve($tournament['cover_image_url'] ?? null, (string) ($tournament['name'] ?? ''));
         $tournament['cover_image_path'] = $tournament['cover_image_url'];
         $tournament['format_label'] = TournamentCatalogService::formatLabel($tournament['format'] ?? '');
         $tournament['funding_label'] = TournamentCatalogService::fundingLabel($tournament['funding_model'] ?? '');
