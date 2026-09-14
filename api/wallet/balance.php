@@ -1,3 +1,3 @@
 <?php
 require_once __DIR__ . '/../../includes/functions.php';
-jsonError('Wallet features are disabled in the MVP.', 410);
+jsonError('Wallet features are disabled for this payment architecture.', 410);

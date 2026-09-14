@@ -127,6 +127,18 @@ async function load() {
           <button class="btn-lime" onclick="saveSettings()">Save Changes</button>
           </div>
         </div>
+        <div class="card">
+          <div class="card-title">Prize Payout Destination</div>
+          <p style="color:var(--muted);font-size:.85rem;margin-top:0;">Add the mobile-money number where KICKOFF prizes should be sent. An administrator must verify it before payout.</p>
+          <div class="alert-success" id="payout-success"></div>
+          <div class="alert-error form-error-summary" id="payout-error" data-form-error hidden></div>
+          <div id="payout-form">
+            <div class="form-group"><label class="form-label">Mobile-money phone</label><input type="tel" class="form-input" id="payout-phone" placeholder="0712345678"></div>
+            <div class="form-group"><label class="form-label">Currency</label><select class="form-select form-input" id="payout-currency"><option value="TZS">TZS</option><option value="USD">USD</option></select></div>
+            <button class="btn-lime" onclick="savePayoutMethod()">Save Payout Destination</button>
+          </div>
+          <div id="payout-methods" style="margin-top:1rem;"></div>
+        </div>
       </div>
     </div>` : ''}
   `;
@@ -137,6 +149,18 @@ function switchTab(btn, id) {
   document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('tab-'+id).classList.add('active');
+}
+
+async function loadPayoutMethods() {
+  const box=document.getElementById('payout-methods'); if(!box) return;
+  try { const r=await fetch('api/users/payout_method.php',{credentials:'same-origin'}); const d=await r.json(); const methods=d.methods||[]; box.innerHTML=methods.length?methods.map(m=>`<div class="history-row"><div><strong>${m.phone_number}</strong><div style="color:var(--muted);font-size:.78rem;">${m.provider} · ${m.currency}</div></div><span class="badge ${Number(m.is_verified)?'badge-win':'badge-soon'}">${Number(m.is_verified)?'Verified':'Awaiting verification'}</span></div>`).join(''):'<div style="color:var(--muted);">No payout destination saved.</div>'; } catch(e) { box.innerHTML='<div style="color:var(--muted);">Could not load payout destinations.</div>'; }
+}
+async function savePayoutMethod() {
+  const err=document.getElementById('payout-error'), suc=document.getElementById('payout-success'); err.hidden=true; suc.style.display='none';
+  const token=window.KickoffUI?.getCsrfToken?.() || '';
+  let csrf=token; if(!csrf){const r=await fetch('api/auth/csrf.php',{credentials:'same-origin'}); const d=await r.json(); csrf=d.csrf_token||'';}
+  const r=await fetch('api/users/payout_method.php',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},credentials:'same-origin',body:JSON.stringify({phone_number:document.getElementById('payout-phone').value,currency:document.getElementById('payout-currency').value})});
+  const d=await r.json(); if(d.success){suc.textContent=d.message||'Payout destination saved.';suc.style.display='block';loadPayoutMethods();}else{err.textContent=d.error||'Could not save payout destination.';err.hidden=false;}
 }
 
 async function saveSettings() {
@@ -176,7 +200,7 @@ async function saveSettings() {
   else { KickoffUI.showFormError(form, data.error || 'Update failed.', { errorId: 'settings-error', title: 'Profile could not be saved' }); }
 }
 
-load();
+load().then(()=>loadPayoutMethods());
 </script>
 </div>
 </body>

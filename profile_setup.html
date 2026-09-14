@@ -57,6 +57,18 @@ body.onboarding-body{min-height:100vh;}
         </div>
         <div class="form-row-2" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;">
           <div class="form-group">
+            <label class="form-label" for="setup-whatsapp-code">WhatsApp Country Code</label>
+            <input type="text" class="form-input" id="setup-whatsapp-code" maxlength="5" placeholder="+255" autocomplete="tel-country-code" required>
+            <div class="field-error-msg" id="err-setup-whatsapp-code"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="setup-whatsapp">WhatsApp Number</label>
+            <input type="tel" class="form-input" id="setup-whatsapp" maxlength="16" placeholder="+255712345678" autocomplete="tel" required>
+            <div class="field-error-msg" id="err-setup-whatsapp"></div>
+          </div>
+        </div>
+        <div class="form-row-2" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;">
+          <div class="form-group">
             <label class="form-label" for="setup-ign">In-game Name</label>
             <input type="text" class="form-input" id="setup-ign" maxlength="80" required>
             <div class="field-error-msg" id="err-setup-ign"></div>
@@ -178,6 +190,8 @@ body.onboarding-body{min-height:100vh;}
     document.getElementById("setup-game").innerHTML = optionRows(catalog.games);
     document.getElementById("setup-platform").innerHTML = optionRows(catalog.platforms);
     document.getElementById("setup-ign").value = profile.user?.username || "";
+    document.getElementById("setup-whatsapp-code").value = profile.user?.whatsapp_country_code || "+255";
+    document.getElementById("setup-whatsapp").value = profile.user?.whatsapp_number || "";
     allAvatars = avatars.avatars || [];
     selectedAvatar = profile.user?.avatar_url ? "" : "";
     renderAvatarTabs();
@@ -201,6 +215,16 @@ body.onboarding-body{min-height:100vh;}
       showError("Please select a tournament platform.", { field: "#setup-platform", fieldMessage: "Choose Mobile, PC, or Console." });
       return false;
     }
+    const whatsapp = document.getElementById("setup-whatsapp").value.trim();
+    const whatsappCode = document.getElementById("setup-whatsapp-code").value.trim();
+    if (!/^\+[1-9]\d{0,3}$/.test(whatsappCode)) {
+      showError("Please enter a valid WhatsApp country code.", { field: "#setup-whatsapp-code", fieldMessage: "Example: +255." });
+      return false;
+    }
+    if (!/^\+[1-9]\d{7,14}$/.test(whatsapp)) {
+      showError("Please enter a valid WhatsApp number.", { field: "#setup-whatsapp", fieldMessage: "Use international format, for example +255712345678." });
+      return false;
+    }
     if (!document.getElementById("setup-ign").value.trim()) {
       showError("Please enter your in-game name.", { field: "#setup-ign", fieldMessage: "This is the name opponents will recognize." });
       return false;
@@ -222,6 +246,8 @@ body.onboarding-body{min-height:100vh;}
         platform_id: Number(document.getElementById("setup-platform").value),
         in_game_name: document.getElementById("setup-ign").value.trim(),
         team_name: document.getElementById("setup-team").value.trim(),
+        whatsapp_country_code: document.getElementById("setup-whatsapp-code").value.trim(),
+        whatsapp_number: document.getElementById("setup-whatsapp").value.trim(),
         avatar: selectedAvatar
       };
       let data;

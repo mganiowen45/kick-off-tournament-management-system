@@ -163,8 +163,10 @@ final class AdminController
              ORDER BY r.created_at DESC LIMIT 100"
         )->fetchAll(PDO::FETCH_ASSOC);
         $payouts = $this->pdo->query(
-            "SELECT po.*, u.username, t.name AS tournament_name
+            "SELECT po.*, u.username, t.name AS tournament_name, pm.phone_number AS payout_phone, pm.is_verified AS payout_phone_verified, pr.placement, pr.placement_label
              FROM payouts po
+             LEFT JOIN user_payout_methods pm ON pm.id = po.payout_method_id
+             LEFT JOIN tournament_prizes pr ON pr.payout_id = po.id
              JOIN users u ON u.id = po.user_id
              JOIN tournaments t ON t.id = po.tournament_id
              ORDER BY po.created_at DESC LIMIT 100"
@@ -189,6 +191,8 @@ final class AdminController
             'ledger' => $ledger,
             'refunds' => $refunds,
             'payouts' => $payouts,
+            'payout_methods' => $this->pdo->query("SELECT pm.*, u.username FROM user_payout_methods pm JOIN users u ON u.id=pm.user_id ORDER BY pm.is_verified ASC, pm.updated_at DESC LIMIT 100")->fetchAll(PDO::FETCH_ASSOC),
+            'prizes' => $this->pdo->query("SELECT pr.*,u.username,t.name AS tournament_name FROM tournament_prizes pr JOIN users u ON u.id=pr.user_id JOIN tournaments t ON t.id=pr.tournament_id ORDER BY pr.created_at DESC LIMIT 100")->fetchAll(PDO::FETCH_ASSOC),
             'webhooks' => $webhooks,
         ]);
     }

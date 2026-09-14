@@ -67,6 +67,7 @@ define('MAIL_USERNAME', (string) kickoff_env('MAIL_USERNAME', ''));
 define('MAIL_PASSWORD', (string) kickoff_env('MAIL_PASSWORD', ''));
 define('PAYMENT_MODE', (string) kickoff_env('PAYMENT_MODE', 'disabled'));
 define('PAYMENT_PROVIDER', (string) kickoff_env('PAYMENT_PROVIDER', 'clickpesa'));
+define('CLICKPESA_API_URL', rtrim((string) kickoff_env('CLICKPESA_API_URL', 'https://api.clickpesa.com'), '/'));
 define('PAYMENT_API_KEY', (string) kickoff_env('PAYMENT_API_KEY', kickoff_env('CLICKPESA_API_KEY', '')));
 define('PAYMENT_API_SECRET', (string) kickoff_env('PAYMENT_API_SECRET', kickoff_env('CLICKPESA_API_SECRET', '')));
 define('PAYMENT_WEBHOOK_SECRET', (string) kickoff_env('PAYMENT_WEBHOOK_SECRET', kickoff_env('CLICKPESA_WEBHOOK_SECRET', '')));

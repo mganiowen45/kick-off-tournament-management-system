@@ -46,6 +46,7 @@
       <div class="form-group">
         <label class="form-label">Tournament Cover *</label>
         <input type="hidden" id="t-cover" required>
+        <div class="cover-filter" id="cover-filter" role="group" aria-label="Filter tournament covers"></div>
         <div class="cover-gallery" id="cover-gallery"></div>
       </div>
       <div class="form-group">
@@ -150,23 +151,58 @@ function setCoverGalleryState(state, message) {
   gallery.innerHTML = `<div class="cover-gallery-state"><div><p>${esc(message || "Could not load tournament covers.")}</p><button type="button" class="btn-ghost" onclick="initCatalog()">Retry</button></div></div>`;
 }
 
-function renderCoverGallery(covers) {
+let coverCatalog = [];
+let activeCoverCategory = "all";
+
+function renderCoverFilters(covers) {
+  const filter = document.getElementById("cover-filter");
+  const categories = [...new Set(covers.map(c => String(c.category || "General").trim()).filter(Boolean))];
+  filter.innerHTML = [["all", "All"], ...categories.map(category => [category, category])].map(([key, label]) =>
+    `<button type="button" class="cover-filter-btn${key === activeCoverCategory ? " active" : ""}" data-cover-category="${esc(key)}">${esc(label)}</button>`
+  ).join("");
+  filter.querySelectorAll("[data-cover-category]").forEach(btn => btn.addEventListener("click", () => {
+    activeCoverCategory = btn.dataset.coverCategory;
+    renderCoverFilters(coverCatalog);
+    renderCoverChoices();
+  }));
+}
+
+function renderCoverChoices() {
   const field = document.getElementById("t-cover");
   const gallery = document.getElementById("cover-gallery");
-  if (!covers.length) {
-    setCoverGalleryState("empty");
+  const visible = activeCoverCategory === "all"
+    ? coverCatalog
+    : coverCatalog.filter(c => String(c.category || "General").trim() === activeCoverCategory);
+  if (!visible.length) {
+    gallery.innerHTML = `<div class="cover-gallery-state"><p>No covers are available in this category.</p></div>`;
+    field.value = "";
     return;
   }
-  gallery.innerHTML = covers.map((c, index) => `<button type="button" class="cover-choice${index === 0 ? " selected" : ""}" data-id="${Number(c.id)}">
-    <img src="${esc(c.file_path)}" alt="">
+  gallery.innerHTML = visible.map(c => `<button type="button" class="cover-choice${Number(c.id) === Number(field.value) ? " selected" : ""}" data-id="${Number(c.id)}">
+    <img src="${esc(c.file_path)}" alt="${esc(c.name)}">
     <span>${esc(c.name)}<small>${esc(c.category)}</small></span>
   </button>`).join("");
-  if (covers[0]) field.value = Number(covers[0].id);
+  if (!visible.some(c => Number(c.id) === Number(field.value))) {
+    field.value = Number(visible[0].id);
+    gallery.querySelector(".cover-choice")?.classList.add("selected");
+  }
   gallery.querySelectorAll(".cover-choice").forEach(btn => btn.addEventListener("click", () => {
     gallery.querySelectorAll(".cover-choice").forEach(item => item.classList.remove("selected"));
     btn.classList.add("selected");
     field.value = btn.dataset.id;
   }));
+}
+
+function renderCoverGallery(covers) {
+  coverCatalog = covers || [];
+  activeCoverCategory = "all";
+  if (!coverCatalog.length) {
+    document.getElementById("cover-filter").innerHTML = "";
+    setCoverGalleryState("empty");
+    return;
+  }
+  renderCoverFilters(coverCatalog);
+  renderCoverChoices();
 }
 
 function selectFormat(el, fmt) {

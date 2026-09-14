@@ -441,7 +441,7 @@ final class TournamentService
                 $userStmt->execute([':id' => $userId]);
                 $payment = $this->payments->createTournamentCheckout($userStmt->fetch(PDO::FETCH_ASSOC), $tournament);
             }
-            if ($newCount >= (int) $tournament['max_players']) {
+            if ((float) $tournament['entry_fee_amount'] <= 0 && $newCount >= (int) $tournament['max_players']) {
                 $this->scheduleCheckIn($tournamentId);
                 $scheduled = $this->loadTournamentSchedule($tournamentId);
                 $this->notifications->tournamentMembers(

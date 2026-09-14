@@ -20,6 +20,8 @@
     <button class="tab-btn" data-tab="ledger">Ledger</button>
     <button class="tab-btn" data-tab="refunds">Refunds</button>
     <button class="tab-btn" data-tab="payouts">Payouts</button>
+    <button class="tab-btn" data-tab="payout_methods">Payout Destinations</button>
+    <button class="tab-btn" data-tab="prizes">Prize Allocations</button>
     <button class="tab-btn" data-tab="webhooks">Webhooks</button>
   </div>
   <section class="section-panel">
@@ -34,7 +36,9 @@ const columns = {
   payments: ["Order", "Player", "Tournament", "Amount", "Status", "Created"],
   ledger: ["Type", "Player", "Tournament", "Direction", "Amount", "Reference"],
   refunds: ["Order", "Player", "Tournament", "Amount", "Status", "Created"],
-  payouts: ["Player", "Tournament", "Amount", "Status", "Approved", "Paid"],
+  payouts: ["Player", "Tournament", "Amount", "Status", "Destination", "Action"],
+  payout_methods: ["Player", "Provider", "Phone", "Verified", "Default", "Action"],
+  prizes: ["Player", "Tournament", "Placement", "Percent", "Amount", "Status"],
   webhooks: ["Provider", "Event", "Order", "Verified", "Processed", "Created"]
 };
 function money(amount, currency) { return `${esc(currency || "TZS")} ${Number(amount || 0).toLocaleString()}`; }
@@ -54,7 +58,9 @@ function row(item) {
   if (activeTab === "payments") return `<tr><td>${esc(item.order_reference)}</td><td>${esc(item.username)}</td><td>${esc(item.tournament_name)}</td><td>${money(item.amount, item.currency)}</td><td>${statusBadge(item.status)}</td><td>${esc(item.created_at)}</td></tr>`;
   if (activeTab === "ledger") return `<tr><td>${esc(item.entry_type)}</td><td>${esc(item.username || "-")}</td><td>${esc(item.tournament_name || "-")}</td><td>${esc(item.direction)}</td><td>${money(item.amount, item.currency)}</td><td>${esc(item.reference || "-")}</td></tr>`;
   if (activeTab === "refunds") return `<tr><td>${esc(item.order_reference)}</td><td>${esc(item.username)}</td><td>${esc(item.tournament_name)}</td><td>${money(item.amount, item.currency)}</td><td>${statusBadge(item.status)}</td><td>${esc(item.created_at)}</td></tr>`;
-  if (activeTab === "payouts") return `<tr><td>${esc(item.username)}</td><td>${esc(item.tournament_name)}</td><td>${money(item.amount, item.currency)}</td><td>${statusBadge(item.status)}</td><td>${esc(item.approved_at || "-")}</td><td>${esc(item.paid_at || "-")}</td></tr>`;
+  if (activeTab === "payouts") return `<tr><td>${esc(item.username)}</td><td>${esc(item.tournament_name)}</td><td>${money(item.amount, item.currency)}</td><td>${statusBadge(item.status)}</td><td>${esc(item.payout_phone || item.recipient_phone || "-")}</td><td><button class="btn-ghost btn-sm" onclick="previewPayout(${Number(item.tournament_id)})">Preview</button> <button class="btn-ghost btn-sm" onclick="processPayout(${Number(item.tournament_id)})">Pay</button> <button class="btn-ghost btn-sm" onclick="reconcilePayout(${Number(item.id)})">Status</button></td></tr>`;
+  if (activeTab === "payout_methods") return `<tr><td>${esc(item.username)}</td><td>${esc(item.provider)}</td><td>${esc(item.phone_number)}</td><td>${Number(item.is_verified)?"Yes":"No"}</td><td>${Number(item.is_default)?"Yes":"No"}</td><td>${Number(item.is_verified)?"Verified":`<button class="btn-ghost btn-sm" onclick="verifyMethod(${Number(item.id)})">Verify</button>`}</td></tr>`;
+  if (activeTab === "prizes") return `<tr><td>${esc(item.username)}</td><td>${esc(item.tournament_name)}</td><td>${esc(item.placement_label)}</td><td>${Number(item.percentage||0)}%</td><td>${money(item.amount,item.currency)}</td><td>${statusBadge(item.status)}</td></tr>`;
   return `<tr><td>${esc(item.provider)}</td><td>${esc(item.event_type)}</td><td>${esc(item.order_reference || "-")}</td><td>${Number(item.verified || 0) ? "Yes" : "No"}</td><td>${esc(item.processed_at || "-")}</td><td>${esc(item.created_at)}</td></tr>`;
 }
 function renderTable() {
@@ -62,6 +68,12 @@ function renderTable() {
   const items = financeData[activeTab] || [];
   document.getElementById("finance-rows").innerHTML = items.length ? items.map(row).join("") : `<tr><td colspan="6"><div class="empty-state" style="min-height:90px;">No records yet.</div></td></tr>`;
 }
+
+async function csrf(){ const r=await fetch("api/auth/csrf.php",{credentials:"same-origin"}); const d=await r.json(); return d.csrf_token||""; }
+async function previewPayout(tournamentId){ const token=await csrf(); const r=await fetch("api/tournaments/payout.php",{method:"POST",headers:{"Content-Type":"application/json","X-CSRF-Token":token},credentials:"same-origin",body:JSON.stringify({action:"preview",tournament_id:tournamentId})}); const d=await r.json(); if(d.success){ const x=d.data||{}; alert(`Winner: ${x.winner_username||"-"}\nAmount: ${x.currency||"TZS"} ${Number(x.amount||0).toLocaleString()}\nPhone: ${x.phone_number||"-"}\nProvider fee: ${x.preview?.fee??"-"}`); } else alert(d.error||"Could not preview payout"); }
+async function processPayout(tournamentId){ if(!confirm("Process this winner payout through ClickPesa?")) return; const token=await csrf(); const r=await fetch("api/tournaments/payout.php",{method:"POST",headers:{"Content-Type":"application/json","X-CSRF-Token":token},credentials:"same-origin",body:JSON.stringify({action:"process",tournament_id:tournamentId})}); const d=await r.json(); if(!d.success) alert(d.error||"Could not process payout"); await load(); }
+async function reconcilePayout(id){ const token=await csrf(); const r=await fetch("api/tournaments/payout.php",{method:"POST",headers:{"Content-Type":"application/json","X-CSRF-Token":token},credentials:"same-origin",body:JSON.stringify({action:"status",payout_id:id})}); const d=await r.json(); if(!d.success) alert(d.error||"Could not reconcile payout"); await load(); }
+async function verifyMethod(id){ const token=await csrf(); const r=await fetch("api/tournaments/payout.php",{method:"POST",headers:{"Content-Type":"application/json","X-CSRF-Token":token},credentials:"same-origin",body:JSON.stringify({action:"verify_method",method_id:id})}); const d=await r.json(); if(!d.success) alert(d.error||"Could not verify payout destination"); await load(); }
 async function load() {
   const res = await fetch("api/admin/finance.php", { credentials: "same-origin" });
   financeData = await res.json();

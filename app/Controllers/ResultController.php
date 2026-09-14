@@ -23,7 +23,7 @@ final class ResultController
     {
         $request->requireMethod('POST');
         $request->requireCsrf();
-        $user = Auth::requireUser();
+        $user = Auth::requireCompletedPlayerProfile();
         Response::success(
             $this->service->submit((int) $user['id'], $request->data(), $_FILES),
             'Result submitted successfully.',
@@ -40,4 +40,3 @@ final class ResultController
         Response::success($this->service->get($matchId, $user));
     }
 }
-

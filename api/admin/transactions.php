@@ -8,3 +8,4 @@ use App\Core\Api;
 use App\Core\Request;
 
 Api::run(fn(Request $request) => (new AdminController())->finance($request));
+
