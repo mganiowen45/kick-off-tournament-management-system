@@ -87,7 +87,11 @@ final class AuthController
 
     private function loginRedirect(array $user, string $returnTo): string
     {
-        if (($user['role'] ?? '') === 'admin') return 'admin_dashboard.html';
+        if (($user['role'] ?? '') === 'admin') {
+            if (empty($user['mfa_enabled'])) return 'admin_mfa_setup.html';
+            if (empty($_SESSION['mfa_verified'])) return 'admin_mfa_verify.html';
+            return 'admin_dashboard.html';
+        }
         if ((int) ($user['profile_setup_completed'] ?? 0) !== 1) {
             return 'profile_setup.html' . ($returnTo !== '' ? '?return_to=' . rawurlencode($returnTo) : '');
         }

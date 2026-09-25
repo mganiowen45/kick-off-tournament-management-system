@@ -1,7 +1,10 @@
 <?php
-require_once __DIR__ . '/../../config/config.php';
-require_once __DIR__ . '/../../includes/auth.php';
-require_once __DIR__ . '/../../includes/functions.php';
+declare(strict_types=1);
 
-destroySession();
-jsonSuccess(['redirect' => 'login.html'], 'Logged out successfully');
+require_once __DIR__ . '/../../bootstrap.php';
+
+use App\Controllers\AuthController;
+use App\Core\Api;
+use App\Core\Request;
+
+Api::run(fn(Request $request) => (new AuthController())->logout($request));

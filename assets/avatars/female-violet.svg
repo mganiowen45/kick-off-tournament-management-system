@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Violet captain avatar">
-  <rect width="256" height="256" rx="48" fill="#241039"/><path d="M62 118q0-91 66-91t66 91v62H62z" fill="#321d43"/>
-  <circle cx="128" cy="103" r="55" fill="#a86d50"/><path d="M72 103q4-76 57-76 55 0 58 80l-26-37-71 8z" fill="#251532"/>
-  <path d="M45 239q10-87 83-87t83 87" fill="#8b5cf6"/><circle cx="107" cy="105" r="5"/><circle cx="149" cy="105" r="5"/>
-  <path d="M108 138q20 15 40 0" fill="none" stroke="#613929" stroke-width="6" stroke-linecap="round"/>
-</svg>

@@ -9,6 +9,198 @@ use App\Core\HttpException;
 final class ClickPesaService
 {
     /**
+     * Cached bearer token for this request lifecycle, so a single
+     * PHP request that makes more than one ClickPesa call doesn't
+     * re-authenticate every time.
+     */
+    private ?string $authToken = null;
+
+    /**
+     * Exchange the ClickPesa client-id/api-key pair for a short-lived
+     * bearer token. ClickPesa's API does not accept the raw api-key as
+     * an Authorization: Bearer value directly — it must first be
+     * exchanged for a token via this endpoint.
+     */
+    private function getAuthToken(): string
+    {
+        if ($this->authToken !== null) {
+            return $this->authToken;
+        }
+
+        if (CLICKPESA_CLIENT_ID === '' || PAYMENT_API_KEY === '') {
+            throw new HttpException(
+                'ClickPesa API credentials are not configured.',
+                503
+            );
+        }
+
+        $ch = curl_init(CLICKPESA_API_URL . '/third-parties/generate-token');
+
+        if (!$ch) {
+            throw new HttpException('Could not initialize ClickPesa authentication request.', 500);
+        }
+
+        // ClickPesa token generation is an API request, not a browser GET.
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => '',
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                'client-id: ' . CLICKPESA_CLIENT_ID,
+                'api-key: ' . PAYMENT_API_KEY,
+                'Accept: application/json',
+            ],
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => 30,
+        ]);
+
+        $raw = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if ($raw === false) {
+            throw new HttpException(
+                'ClickPesa authentication request failed.' . ($error !== '' ? ' ' . $error : ''),
+                502
+            );
+        }
+
+        $decoded = json_decode((string) $raw, true);
+
+        if ($status < 200 || $status >= 300) {
+            $providerMessage = '';
+            if (is_array($decoded)) {
+                $providerMessage = trim((string) (
+                    $decoded['message']
+                    ?? $decoded['error']
+                    ?? $decoded['errorMessage']
+                    ?? ($decoded['data']['message'] ?? '')
+                ));
+            }
+
+            throw new HttpException(
+                'ClickPesa rejected the authentication request. HTTP ' . $status
+                . ($providerMessage !== '' ? ': ' . $providerMessage : '.'),
+                502
+            );
+        }
+
+        // Accept the common token field variants used by API responses.
+        $token = '';
+        if (is_array($decoded)) {
+            $token = trim((string) (
+                $decoded['token']
+                ?? $decoded['accessToken']
+                ?? $decoded['access_token']
+                ?? ($decoded['data']['token'] ?? '')
+                ?? ($decoded['data']['accessToken'] ?? '')
+                ?? ($decoded['data']['access_token'] ?? '')
+            ));
+        }
+
+        if ($token === '') {
+            throw new HttpException(
+                'ClickPesa authentication succeeded but no access token was returned. HTTP ' . $status . '.',
+                502
+            );
+        }
+
+        $this->authToken = $token;
+        return $token;
+    }
+
+    /**
+     * Initiate a ClickPesa USSD-PUSH collection.
+     *
+     * This sends the payment prompt to the customer's mobile-money
+     * handset. The customer enters their PIN on the handset; KICKOFF
+     * never receives or stores the PIN.
+     */
+    public function initiateUssdPush(
+        array $payment,
+        string $phone
+    ): array {
+        if (PAYMENT_MODE === 'disabled') {
+            throw new HttpException('Online payments are not enabled yet.', 503);
+        }
+
+        if (PAYMENT_MODE === 'sandbox') {
+            return [
+                'provider_reference' => 'sandbox-' . $payment['order_reference'],
+                'status' => 'PROCESSING',
+                'mode' => 'sandbox',
+                'raw' => [],
+            ];
+        }
+
+        $normalizedPhone = $this->normalizeCustomerPhone($phone, '255');
+        if (!preg_match('/^255[67]\d{8}$/', $normalizedPhone)) {
+            throw new HttpException(
+                'Enter a valid Tanzanian mobile-money number, for example 0712345678.',
+                422
+            );
+        }
+
+        if (PAYMENT_API_KEY === '' || CLICKPESA_CLIENT_ID === '') {
+            throw new HttpException('ClickPesa API credentials are not configured.', 503);
+        }
+
+        $payload = [
+            'amount' => (string) (int) round((float) $payment['amount']),
+            'currency' => (string) ($payment['currency'] ?? DEFAULT_CURRENCY),
+            'orderReference' => (string) $payment['order_reference'],
+            'phoneNumber' => $normalizedPhone,
+        ];
+
+        $token = $this->getAuthToken();
+
+        // Validate the phone, amount and available mobile-money methods first.
+        $previewPayload = $this->withChecksum(array_merge($payload, ['fetchSenderDetails' => false]));
+        $preview = $this->postJson(
+            CLICKPESA_API_URL . '/third-parties/payments/preview-ussd-push-request',
+            $previewPayload,
+            $token
+        );
+
+        $methods = is_array($preview['activeMethods'] ?? null)
+            ? $preview['activeMethods']
+            : [];
+        $available = array_filter(
+            $methods,
+            static fn ($method): bool => is_array($method) && strtoupper((string) ($method['status'] ?? '')) === 'AVAILABLE'
+        );
+        if ($available === []) {
+            throw new HttpException(
+                'No mobile-money payment method is currently available for this number.',
+                409
+            );
+        }
+
+        $initiatePayload = $this->withChecksum($payload);
+        $response = $this->postJson(
+            CLICKPESA_API_URL . '/third-parties/payments/initiate-ussd-push-request',
+            $initiatePayload,
+            $token
+        );
+
+        $status = strtoupper(trim((string) ($response['status'] ?? 'PROCESSING')));
+        $providerReference = trim((string) (
+            $response['id']
+            ?? $response['paymentReference']
+            ?? $response['transactionId']
+            ?? ''
+        ));
+
+        return [
+            'provider_reference' => $providerReference !== '' ? $providerReference : null,
+            'status' => $status,
+            'mode' => 'live',
+            'raw' => $response,
+        ];
+    }
+
+    /**
      * Generate a ClickPesa Hosted Checkout Link.
      */
     public function createCheckout(
@@ -26,10 +218,7 @@ final class ClickPesaService
         /*
          * Sandbox mode is useful for local development.
          */
-        if (
-            PAYMENT_MODE === 'sandbox'
-            || PAYMENT_API_KEY === ''
-        ) {
+        if (PAYMENT_MODE === 'sandbox') {
             return [
                 'checkout_url' =>
                     APP_URL
@@ -48,77 +237,41 @@ final class ClickPesaService
             ];
         }
 
-        if (PAYMENT_API_KEY === '') {
+        if (PAYMENT_API_KEY === '' || CLICKPESA_CLIENT_ID === '') {
             throw new HttpException(
                 'ClickPesa API credentials are not configured.',
                 503
             );
         }
 
-        $customerName = trim(
-            (string) (
-                ($user['first_name'] ?? '')
-                . ' '
-                . ($user['last_name'] ?? '')
-            )
-        );
-
-        if ($customerName === '') {
-            $customerName = (string) (
-                $user['username'] ?? 'KICKOFF Player'
-            );
-        }
-
-        $phone = $this->normalizeCustomerPhone(
-            (string) ($user['whatsapp_number'] ?? ''),
-            (string) ($user['whatsapp_country_code'] ?? '255')
-        );
-
-        if ($phone === '') {
-            throw new HttpException(
-                'A valid WhatsApp/mobile phone number is required before making a payment.',
-                422
-            );
-        }
-
         /*
          * ClickPesa Hosted Checkout API payload.
          *
-         * Current ClickPesa documentation requires:
-         * totalPrice
+         * ClickPesa requires:
+         * orderItems  — array of {name, product_type, price, quantity}
          * orderReference
-         * orderCurrency
+         * merchantId  — the CLICKPESA_CLIENT_ID
          *
-         * Customer fields are optional individually, but supplying
-         * them gives the checkout a better customer experience.
+         * Optional: callbackURL, customer fields via metadata.
          */
         $payload = [
-            'totalPrice' => number_format(
-                (float) $payment['amount'],
-                2,
-                '.',
-                ''
-            ),
+            'orderItems' => [
+                [
+                    'name' => 'KICKOFF tournament entry fee: '
+                        . (string) ($tournament['name'] ?? 'Tournament'),
+                    'product_type' => 'DIGITAL_PRODUCT',
+                    'unit' => '1 entry',
+                    'price' => (int) round(
+                        (float) $payment['amount']
+                    ),
+                    'quantity' => 1,
+                ],
+            ],
 
             'orderReference' =>
                 (string) $payment['order_reference'],
 
-            'orderCurrency' =>
-                (string) (
-                    $payment['currency']
-                    ?? DEFAULT_CURRENCY
-                ),
-
-            'customerName' => $customerName,
-
-            'customerEmail' =>
-                (string) ($user['email'] ?? ''),
-
-            'customerPhone' => $phone,
-
-            'description' =>
-                'KICKOFF tournament entry fee: '
-                . (string) ($tournament['name'] ?? 'Tournament'),
+            'merchantId' => CLICKPESA_CLIENT_ID,
 
             /*
              * This is the optional per-checkout callback.
@@ -126,7 +279,7 @@ final class ClickPesaService
              * Application-level ClickPesa webhooks should ALSO be
              * configured in the ClickPesa dashboard.
              */
-            'callbackUrl' =>
+            'callbackURL' =>
                 APP_URL
                 . '/api/payments/clickpesa_webhook.php',
         ];
@@ -140,11 +293,15 @@ final class ClickPesaService
             CLICKPESA_API_URL
                 . '/third-parties/checkout-link/generate-checkout-url',
             $payload,
-            PAYMENT_API_KEY
+            $this->getAuthToken()
         );
 
         $checkoutLink = trim(
-            (string) ($response['checkoutLink'] ?? '')
+            (string) (
+                $response['checkoutUrl']
+                ?? $response['checkoutLink']
+                ?? ''
+            )
         );
 
         if ($checkoutLink === '') {
@@ -229,10 +386,7 @@ final class ClickPesaService
             );
         }
 
-        if (
-            PAYMENT_MODE === 'sandbox'
-            || PAYMENT_API_KEY === ''
-        ) {
+        if (PAYMENT_MODE === 'sandbox') {
             return [
                 'status' => 'SUCCESS',
                 'provider_reference' =>
@@ -244,6 +398,13 @@ final class ClickPesaService
             ];
         }
 
+        if (PAYMENT_API_KEY === '' || CLICKPESA_CLIENT_ID === '') {
+            throw new HttpException(
+                'ClickPesa API credentials are not configured.',
+                503
+            );
+        }
+
         $url =
             CLICKPESA_API_URL
             . '/third-parties/payments/'
@@ -251,7 +412,7 @@ final class ClickPesaService
 
         $response = $this->getJson(
             $url,
-            PAYMENT_API_KEY
+            $this->getAuthToken()
         );
 
         /*
@@ -537,10 +698,53 @@ final class ClickPesaService
         }
 
         if ($status < 200 || $status >= 300) {
+            $providerMessage = '';
+            $decoded = json_decode((string) $raw, true);
+            if (is_array($decoded)) {
+                $candidate =
+                    $decoded['message']
+                    ?? $decoded['error']
+                    ?? $decoded['errorMessage']
+                    ?? ($decoded['data']['message'] ?? null);
+
+                if (is_array($candidate)) {
+                    $providerMessage = json_encode(
+                        $candidate,
+                        JSON_UNESCAPED_SLASHES
+                        | JSON_UNESCAPED_UNICODE
+                    ) ?: '';
+                } elseif ($candidate !== null) {
+                    $providerMessage = trim(
+                        (string) $candidate
+                    );
+                }
+
+                /*
+                 * If no top-level message, dump the whole
+                 * body so we can debug field-level errors.
+                 */
+                if ($providerMessage === '') {
+                    $providerMessage = json_encode(
+                        $decoded,
+                        JSON_UNESCAPED_SLASHES
+                        | JSON_UNESCAPED_UNICODE
+                    ) ?: '';
+                }
+            }
+
+            error_log(
+                '[KICKOFF ClickPesa] HTTP '
+                . $status . ' | '
+                . $providerMessage
+                . ' | Request URL: ' . $url
+            );
+
             throw new HttpException(
                 'ClickPesa rejected the checkout request. HTTP '
                 . $status
-                . '.',
+                . ($providerMessage !== ''
+                    ? ': ' . $providerMessage
+                    : '.'),
                 502
             );
         }

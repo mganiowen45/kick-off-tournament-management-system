@@ -48,7 +48,7 @@ final class ImageUploader
             throw new HttpException('The screenshot could not be saved.', 500);
         }
         @chmod($path, 0644);
-        return ['filename' => $filename, 'path' => $path, 'url' => UPLOAD_URL . 'results/' . rawurlencode($filename)];
+        return ['filename' => $filename, 'path' => $path, 'url' => SITE_URL . '/api/disputes/evidence.php?file=' . rawurlencode($filename)];
     }
 
     public function deleteByUrl(?string $url): void

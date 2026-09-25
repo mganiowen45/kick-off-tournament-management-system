@@ -43,7 +43,7 @@ define('DEBUG_MODE', APP_DEBUG);
 // --- Database ---
 define('DB_HOST', (string) kickoff_env('DB_HOST', 'localhost'));
 define('DB_PORT', (int) kickoff_env('DB_PORT', 3306));
-define('DB_NAME', (string) kickoff_env('DB_NAME', 'kick_off'));
+define('DB_NAME', (string) kickoff_env('DB_NAME', 'kick_off_test'));
 define('DB_USER', (string) kickoff_env('DB_USER', 'root'));
 define('DB_PASS', (string) kickoff_env('DB_PASSWORD', kickoff_env('DB_PASS', '')));
 define('DB_CHARSET', (string) kickoff_env('DB_CHARSET', 'utf8mb4'));
@@ -68,8 +68,9 @@ define('MAIL_PASSWORD', (string) kickoff_env('MAIL_PASSWORD', ''));
 define('PAYMENT_MODE', (string) kickoff_env('PAYMENT_MODE', 'disabled'));
 define('PAYMENT_PROVIDER', (string) kickoff_env('PAYMENT_PROVIDER', 'clickpesa'));
 define('CLICKPESA_API_URL', rtrim((string) kickoff_env('CLICKPESA_API_URL', 'https://api.clickpesa.com'), '/'));
+define('CLICKPESA_CLIENT_ID', (string) kickoff_env('CLICKPESA_CLIENT_ID', ''));
 define('PAYMENT_API_KEY', (string) kickoff_env('PAYMENT_API_KEY', kickoff_env('CLICKPESA_API_KEY', '')));
-define('PAYMENT_API_SECRET', (string) kickoff_env('PAYMENT_API_SECRET', kickoff_env('CLICKPESA_API_SECRET', '')));
+define('PAYMENT_API_SECRET', (string) kickoff_env('PAYMENT_API_SECRET', kickoff_env('CLICKPESA_API_SECRET', kickoff_env('CLICKPESA_WEBHOOK_SECRET', kickoff_env('PAYMENT_WEBHOOK_SECRET', '')))));
 define('PAYMENT_WEBHOOK_SECRET', (string) kickoff_env('PAYMENT_WEBHOOK_SECRET', kickoff_env('CLICKPESA_WEBHOOK_SECRET', '')));
 define('CLICKPESA_API_KEY', PAYMENT_API_KEY);
 define('CLICKPESA_WEBHOOK_SECRET', PAYMENT_WEBHOOK_SECRET);
@@ -84,7 +85,11 @@ define('CHECK_IN_CLOSE_MINUTES_BEFORE_AUTO_START', (int) kickoff_env('CHECK_IN_C
 define('UPLOAD_DIR', __DIR__ . '/../uploads/');
 define('UPLOAD_URL', SITE_URL . '/uploads/');
 define('DEFAULT_AVATAR', (string) kickoff_env('DEFAULT_AVATAR', 'gamer-neon.svg'));
-define('AVATAR_URL', SITE_URL . '/assets/avatars/');
+// Kept root-relative (not prefixed with SITE_URL) so avatars keep loading
+// even when the app is reached through a different host/tunnel than the one
+// baked into APP_URL (e.g. a rotated ngrok URL) - mirrors how tournament
+// covers and the admin avatar catalog already reference this folder.
+define('AVATAR_URL', 'assets/avatars/');
 define('MAX_FILE_SIZE', 5 * 1024 * 1024);
 define('ALLOWED_TYPES', ['image/jpeg', 'image/png', 'image/webp']);
 define('ALLOWED_EXTS', ['jpg', 'jpeg', 'png', 'webp']);
@@ -118,7 +123,7 @@ if (PHP_SAPI !== 'cli' && !headers_sent()) {
     header("Content-Security-Policy: default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com data:; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'");
 }
 
-$allowedOrigins = array_unique(['http://localhost', 'http://localhost/kickoff5', SITE_URL]);
+$allowedOrigins = array_unique(['https://osteoplastic-audiometrically-lurlene.ngrok-free.dev', 'https://osteoplastic-audiometrically-lurlene.ngrok-free.dev', SITE_URL]);
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 if (PHP_SAPI !== 'cli' && $origin !== '' && in_array($origin, $allowedOrigins, true)) {
     header('Access-Control-Allow-Origin: ' . $origin);

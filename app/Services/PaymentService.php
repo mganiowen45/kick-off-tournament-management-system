@@ -16,163 +16,237 @@ final class PaymentService
         $this->clickPesa = new ClickPesaService();
     }
 
-    public function createTournamentCheckout(
-    array $user,
-    array $tournament
-): array {
-    $amount = (float) (
-        $tournament['entry_fee_amount'] ?? 0
-    );
+    public function createTournamentUssdPush(
+        array $user,
+        array $tournament,
+        string $phone
+    ): array {
+        $amount = (float) ($tournament['entry_fee_amount'] ?? 0);
+        if ($amount <= 0) {
+            return ['required' => false];
+        }
 
-    if ($amount <= 0) {
+        $orderReference = sprintf(
+            'KO%d%d%s',
+            (int) $tournament['id'],
+            (int) $user['id'],
+            strtoupper(bin2hex(random_bytes(5)))
+        );
+
+        $expiresAt = date(
+            'Y-m-d H:i:s',
+            time() + ((int) RESERVATION_EXPIRY_MINUTES * 60)
+        );
+
+        $insert = $this->pdo->prepare(
+            "INSERT INTO payments
+                (user_id, tournament_id, order_reference, amount, currency, status, expires_at, metadata)
+             VALUES
+                (:user, :tournament, :reference, :amount, :currency, 'pending', :expires, :metadata)"
+        );
+
+        $insert->execute([
+            ':user' => (int) $user['id'],
+            ':tournament' => (int) $tournament['id'],
+            ':reference' => $orderReference,
+            ':amount' => $amount,
+            ':currency' => (string) ($tournament['currency'] ?? DEFAULT_CURRENCY),
+            ':expires' => $expiresAt,
+            ':metadata' => json_encode([
+                'payment_flow' => 'tournament_creator_ussd_push',
+                'phone' => $phone,
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+        ]);
+
+        $payment = [
+            'id' => (int) $this->pdo->lastInsertId(),
+            'order_reference' => $orderReference,
+            'amount' => $amount,
+            'currency' => (string) ($tournament['currency'] ?? DEFAULT_CURRENCY),
+        ];
+
+        try {
+            $push = $this->clickPesa->initiateUssdPush($payment, $phone);
+        } catch (\Throwable $exception) {
+            $this->pdo->prepare(
+                "UPDATE payments SET status = 'failed', updated_at = NOW() WHERE id = :id AND status = 'pending'"
+            )->execute([':id' => $payment['id']]);
+            throw $exception;
+        }
+
+        $providerReference = $push['provider_reference'] ?? null;
+        $metadata = json_encode([
+            'payment_flow' => 'tournament_creator_ussd_push',
+            'phone' => $phone,
+            'clickpesa' => $push['raw'] ?? [],
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        $this->pdo->prepare(
+            "UPDATE payments
+             SET provider_reference = :provider_ref,
+                 metadata = :metadata,
+                 status = 'requires_action',
+                 updated_at = NOW()
+             WHERE id = :id AND status = 'pending'"
+        )->execute([
+            ':provider_ref' => $providerReference,
+            ':metadata' => $metadata,
+            ':id' => $payment['id'],
+        ]);
+
         return [
-            'required' => false,
+            'required' => true,
+            'payment_id' => $payment['id'],
+            'order_reference' => $orderReference,
+            'status' => 'requires_action',
+            'expires_at' => $expiresAt,
+            'mode' => $push['mode'],
         ];
     }
 
-    /*
-     * Every checkout gets its own unique order reference.
-     */
-    $orderReference = sprintf(
-        'KO-%d-%d-%s',
-        (int) $tournament['id'],
-        (int) $user['id'],
-        strtoupper(bin2hex(random_bytes(4)))
-    );
+    public function createTournamentCheckout(
+        array $user,
+        array $tournament
+    ): array {
+        $amount = (float) ($tournament['entry_fee_amount'] ?? 0);
+        if ($amount <= 0) {
+            return ['required' => false];
+        }
 
-    $expiresAt = date(
-        'Y-m-d H:i:s',
-        time()
-        + (
-            (int) RESERVATION_EXPIRY_MINUTES
-            * 60
-        )
-    );
-
-    /*
-     * Create our internal payment record FIRST.
-     *
-     * If ClickPesa fails afterwards, the surrounding
-     * TournamentService transaction will roll back.
-     */
-    $insert = $this->pdo->prepare(
-        "INSERT INTO payments
-            (
-                user_id,
-                tournament_id,
-                order_reference,
-                amount,
-                currency,
-                status,
-                expires_at
-            )
-         VALUES
-            (
-                :user,
-                :tournament,
-                :reference,
-                :amount,
-                :currency,
-                'pending',
-                :expires
-            )"
-    );
-
-    $insert->execute([
-        ':user' =>
-            (int) $user['id'],
-
-        ':tournament' =>
+        $orderReference = sprintf(
+            'KO%d%d%s',
             (int) $tournament['id'],
+            (int) $user['id'],
+            strtoupper(bin2hex(random_bytes(5)))
+        );
 
-        ':reference' =>
-            $orderReference,
+        $expiresAt = date(
+            'Y-m-d H:i:s',
+            time() + ((int) RESERVATION_EXPIRY_MINUTES * 60)
+        );
 
-        ':amount' =>
-            $amount,
+        $insert = $this->pdo->prepare(
+            "INSERT INTO payments
+                (user_id, tournament_id, order_reference, amount, currency, status, expires_at, metadata)
+             VALUES
+                (:user, :tournament, :reference, :amount, :currency, 'pending', :expires, :metadata)"
+        );
 
-        ':currency' =>
-            (string) (
-                $tournament['currency']
-                ?? DEFAULT_CURRENCY
-            ),
+        $insert->execute([
+            ':user' => (int) $user['id'],
+            ':tournament' => (int) $tournament['id'],
+            ':reference' => $orderReference,
+            ':amount' => $amount,
+            ':currency' => (string) ($tournament['currency'] ?? DEFAULT_CURRENCY),
+            ':expires' => $expiresAt,
+            ':metadata' => json_encode([
+                'payment_flow' => 'tournament_join_checkout',
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+        ]);
 
-        ':expires' =>
-            $expiresAt,
-    ]);
+        $payment = [
+            'id' => (int) $this->pdo->lastInsertId(),
+            'order_reference' => $orderReference,
+            'amount' => $amount,
+            'currency' => (string) ($tournament['currency'] ?? DEFAULT_CURRENCY),
+        ];
 
-    $payment = [
-        'id' =>
-            (int) $this->pdo->lastInsertId(),
+        try {
+            $checkout = $this->clickPesa->createCheckout($payment, $user, $tournament);
+        } catch (\Throwable $exception) {
+            $this->pdo->prepare(
+                "UPDATE payments SET status = 'failed', updated_at = NOW() WHERE id = :id AND status = 'pending'"
+            )->execute([':id' => $payment['id']]);
+            throw $exception;
+        }
 
-        'order_reference' =>
-            $orderReference,
+        $providerReference = $checkout['provider_reference'] ?? null;
+        $metadata = json_encode([
+            'payment_flow' => 'tournament_join_checkout',
+            'clickpesa' => $checkout['raw'] ?? [],
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
-        'amount' =>
-            $amount,
+        $this->pdo->prepare(
+            "UPDATE payments
+             SET provider_reference = :provider_ref,
+                 metadata = :metadata,
+                 status = 'requires_action',
+                 updated_at = NOW()
+             WHERE id = :id AND status = 'pending'"
+        )->execute([
+            ':provider_ref' => $providerReference,
+            ':metadata' => $metadata,
+            ':id' => $payment['id'],
+        ]);
 
-        'currency' =>
-            (string) (
-                $tournament['currency']
-                ?? DEFAULT_CURRENCY
-            ),
-    ];
+        return [
+            'required' => true,
+            'payment_id' => $payment['id'],
+            'order_reference' => $orderReference,
+            'checkout_url' => $checkout['checkout_url'],
+            'status' => 'requires_action',
+            'expires_at' => $expiresAt,
+            'mode' => $checkout['mode'],
+        ];
+    }
 
-    /*
-     * Ask ClickPesa to create the Hosted Checkout Link.
-     */
-    $checkout = $this->clickPesa->createCheckout(
-        $payment,
-        $user,
-        $tournament
-    );
+    public function getPaymentStatusForUser(
+        int $userId,
+        int $paymentId,
+        bool $refreshProvider = true
+    ): array {
+        $stmt = $this->pdo->prepare(
+            'SELECT * FROM payments WHERE id = :id AND user_id = :user LIMIT 1'
+        );
+        $stmt->execute([':id' => $paymentId, ':user' => $userId]);
+        $payment = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    /*
-     * Store the checkout URL and ClickPesa application
-     * reference.
-     */
-    $update = $this->pdo->prepare(
-        "UPDATE payments
-         SET
-            checkout_url = :url,
-            provider_reference = :provider_ref,
-            status = 'requires_action',
-            updated_at = NOW()
-         WHERE id = :id"
-    );
+        if (!$payment) {
+            throw new HttpException('Payment was not found.', 404);
+        }
 
-    $update->execute([
-        ':url' =>
-            $checkout['checkout_url'],
+        if ($refreshProvider && in_array($payment['status'], ['pending', 'requires_action'], true)) {
+            try {
+                $provider = $this->clickPesa->queryPaymentStatus((string) $payment['order_reference']);
+                $providerStatus = strtoupper((string) ($provider['status'] ?? ''));
 
-        ':provider_ref' =>
-            !empty($checkout['provider_reference'])
-                ? $checkout['provider_reference']
-                : null,
+                Database::transaction(function () use ($payment, $provider, $providerStatus): void {
+                    $lockedStmt = $this->pdo->prepare('SELECT * FROM payments WHERE id = :id FOR UPDATE');
+                    $lockedStmt->execute([':id' => $payment['id']]);
+                    $fresh = $lockedStmt->fetch(PDO::FETCH_ASSOC);
+                    if (!$fresh || !in_array($fresh['status'], ['pending', 'requires_action'], true)) {
+                        return;
+                    }
 
-        ':id' =>
-            $payment['id'],
-    ]);
+                    if (in_array($providerStatus, ['SUCCESS', 'SETTLED'], true)) {
+                        if ($provider['amount'] !== null && round((float) $provider['amount'], 2) !== round((float) $fresh['amount'], 2)) {
+                            throw new HttpException('Payment amount mismatch during reconciliation.', 409);
+                        }
+                        $this->confirmPayment($fresh);
+                    } elseif ($providerStatus === 'FAILED') {
+                        $this->markFailed($fresh);
+                    }
+                });
+            } catch (HttpException $exception) {
+                throw $exception;
+            } catch (\Throwable $exception) {
+                error_log('[KICKOFF payment status] ' . $exception->getMessage());
+            }
 
-    return [
-        'required' => true,
+            $stmt->execute([':id' => $paymentId, ':user' => $userId]);
+            $payment = $stmt->fetch(PDO::FETCH_ASSOC);
+        }
 
-        'payment_id' =>
-            $payment['id'],
-
-        'order_reference' =>
-            $orderReference,
-
-        'checkout_url' =>
-            $checkout['checkout_url'],
-
-        'expires_at' =>
-            $expiresAt,
-
-        'mode' =>
-            $checkout['mode'],
-    ];
-}
+        return [
+            'payment_id' => (int) $payment['id'],
+            'tournament_id' => (int) $payment['tournament_id'],
+            'status' => (string) $payment['status'],
+            'amount' => (float) $payment['amount'],
+            'currency' => (string) $payment['currency'],
+            'confirmed_at' => $payment['confirmed_at'],
+            'expires_at' => $payment['expires_at'],
+        ];
+    }
 
     public function handleClickPesaWebhook(
     array $payload,
@@ -536,24 +610,62 @@ final class PaymentService
     }
 
     /*
-     * Mark the tournament participant as paid.
+     * Lock the tournament and player to prevent race conditions.
      */
-    $this->pdo->prepare(
-        "UPDATE tournament_players
-         SET
-            status = 'registered',
-            payment_status = 'paid',
-            reservation_expires_at = NULL
-         WHERE tournament_id = :tournament
-           AND user_id = :user
-           AND status = 'registered'"
-    )->execute([
-        ':tournament' =>
-            $payment['tournament_id'],
+    $tournamentStmt = $this->pdo->prepare("SELECT * FROM tournaments WHERE id = :id FOR UPDATE");
+    $tournamentStmt->execute([':id' => $payment['tournament_id']]);
+    $tournament = $tournamentStmt->fetch(\PDO::FETCH_ASSOC);
 
-        ':user' =>
-            $payment['user_id'],
-    ]);
+    $playerStmt = $this->pdo->prepare(
+        "SELECT * FROM tournament_players WHERE tournament_id = :tid AND user_id = :uid FOR UPDATE"
+    );
+    $playerStmt->execute([':tid' => $payment['tournament_id'], ':uid' => $payment['user_id']]);
+    $player = $playerStmt->fetch(\PDO::FETCH_ASSOC);
+
+    $requiresRefund = false;
+    
+    if ($player && $player['status'] === 'withdrawn') {
+        if ((int) $tournament['current_players'] < (int) $tournament['max_players']) {
+            // Re-admit the player
+            $this->pdo->prepare(
+                "UPDATE tournament_players SET status = 'registered', payment_status = 'paid', reservation_expires_at = NULL WHERE id = :id"
+            )->execute([':id' => $player['id']]);
+            $this->pdo->prepare("UPDATE tournaments SET current_players = current_players + 1 WHERE id = :id")
+                ->execute([':id' => $payment['tournament_id']]);
+        } else {
+            // Tournament is full, refund required
+            $requiresRefund = true;
+        }
+    } elseif ($player) {
+        $this->pdo->prepare(
+            "UPDATE tournament_players SET status = 'registered', payment_status = 'paid', reservation_expires_at = NULL WHERE id = :id"
+        )->execute([':id' => $player['id']]);
+    }
+
+    if ($requiresRefund) {
+        $this->pdo->prepare(
+            "INSERT INTO refunds (payment_id, amount, currency, reason, status, created_at)
+             VALUES (:pid, :amount, :currency, 'Late payment after tournament filled', 'processing', NOW())"
+        )->execute([
+            ':pid' => $payment['id'],
+            ':amount' => $payment['amount'],
+            ':currency' => $payment['currency'],
+        ]);
+        
+        $this->pdo->prepare("UPDATE payments SET status = 'refunded' WHERE id = :id")
+            ->execute([':id' => $payment['id']]);
+            
+        (new NotificationService($this->pdo))->create(
+            (int) $payment['user_id'],
+            'Payment Refunded',
+            'Your payment arrived after the tournament was filled. A refund has been initiated.',
+            'payment_refunded',
+            'payments.html'
+        );
+        
+        // Skip ledger and prize pool logic
+        return;
+    }
 
     /*
      * Get tournament-specific platform fee.

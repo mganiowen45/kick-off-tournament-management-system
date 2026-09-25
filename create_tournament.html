@@ -9,6 +9,25 @@
 <link rel="stylesheet" href="assets/css/page-overrides.css">
 <script src="assets/js/kickoff-ui.js"></script>
 <script src="includes/nav.js" data-page="create_tournament" data-layout="app"></script>
+
+<style>
+  .payment-modal-backdrop {
+    position: fixed; inset: 0; z-index: 9999; display: none; align-items: center; justify-content: center;
+    padding: 1rem; background: rgba(5, 10, 16, .78); backdrop-filter: blur(10px);
+  }
+  .payment-modal-backdrop.is-open { display: flex; }
+  .payment-modal { width: min(460px, 100%); background: var(--panel, #111923); border: 1px solid rgba(255,255,255,.12);
+    border-radius: 18px; padding: 1.4rem; box-shadow: 0 24px 70px rgba(0,0,0,.45); }
+  .payment-modal h3 { margin: 0 0 .4rem; }
+  .payment-modal .payment-amount { font-size: 1.25rem; font-weight: 800; margin: .8rem 0 1rem; }
+  .payment-modal .payment-help { opacity: .78; font-size: .9rem; line-height: 1.5; margin-bottom: 1rem; }
+  .payment-modal .payment-error { display:none; margin:.8rem 0; }
+  .payment-modal .modal-actions { display:flex; gap:.7rem; margin-top:1rem; }
+  .payment-modal .modal-actions > * { flex:1; }
+  .payment-status { text-align:center; padding:.8rem 0 .2rem; }
+  .payment-spinner { width:38px; height:38px; border:3px solid rgba(255,255,255,.16); border-top-color: currentColor; border-radius:50%; animation:kickoff-spin .8s linear infinite; margin:0 auto 1rem; }
+  @keyframes kickoff-spin { to { transform:rotate(360deg); } }
+</style>
 </head>
 <body>
 <div id="page-main">
@@ -114,6 +133,31 @@
       <button type="submit" class="btn-lime" style="flex:1;" id="create-btn">Create Tournament</button>
     </div>
   </form>
+</div>
+
+
+<div class="payment-modal-backdrop" id="payment-modal" aria-hidden="true">
+  <div class="payment-modal" role="dialog" aria-modal="true" aria-labelledby="payment-modal-title">
+    <div id="payment-form-state">
+      <div class="sec-tag">Secure payment</div>
+      <h3 id="payment-modal-title">Pay tournament creation fee</h3>
+      <div class="payment-amount" id="payment-amount">TZS 0</div>
+      <div class="payment-help">Enter the Tanzanian mobile-money number that should receive the ClickPesa payment prompt. Your PIN is entered only on your phone and is never sent to KICKOFF.</div>
+      <label class="form-label" for="payment-phone">Mobile Money Number</label>
+      <input class="form-input" id="payment-phone" inputmode="tel" autocomplete="tel" placeholder="0712 345 678" maxlength="13">
+      <div class="alert-error payment-error" id="payment-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="payment-cancel">Cancel</button>
+        <button type="button" class="btn-lime" id="payment-confirm">Pay &amp; Create Tournament</button>
+      </div>
+    </div>
+    <div class="payment-status" id="payment-waiting-state" hidden>
+      <div class="payment-spinner"></div>
+      <h3>Payment request sent</h3>
+      <p id="payment-waiting-message">Check your phone and approve the payment with your mobile-money PIN.</p>
+      <p style="opacity:.7;font-size:.85rem;">This page will update automatically when ClickPesa confirms the payment.</p>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -241,6 +285,89 @@ function updatePrizePreview() {
   document.getElementById(id).addEventListener("change", updatePrizePreview);
 });
 
+const paymentModal = document.getElementById("payment-modal");
+const paymentPhone = document.getElementById("payment-phone");
+const paymentError = document.getElementById("payment-error");
+const paymentAmount = document.getElementById("payment-amount");
+const paymentFormState = document.getElementById("payment-form-state");
+const paymentWaitingState = document.getElementById("payment-waiting-state");
+const paymentWaitingMessage = document.getElementById("payment-waiting-message");
+const paymentConfirm = document.getElementById("payment-confirm");
+const paymentCancel = document.getElementById("payment-cancel");
+
+function openPaymentModal(amount) {
+  paymentAmount.textContent = `TZS ${Number(amount).toLocaleString()}`;
+  paymentPhone.value = "";
+  paymentError.style.display = "none";
+  paymentError.textContent = "";
+  paymentFormState.hidden = false;
+  paymentWaitingState.hidden = true;
+  paymentModal.classList.add("is-open");
+  paymentModal.setAttribute("aria-hidden", "false");
+  setTimeout(() => paymentPhone.focus(), 50);
+}
+
+function closePaymentModal() {
+  paymentModal.classList.remove("is-open");
+  paymentModal.setAttribute("aria-hidden", "true");
+}
+
+paymentCancel.addEventListener("click", closePaymentModal);
+paymentModal.addEventListener("click", event => {
+  if (event.target === paymentModal && !paymentConfirm.disabled) closePaymentModal();
+});
+
+function validTzPhone(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  return /^(?:0[67]\d{8}|255[67]\d{8}|[67]\d{8})$/.test(digits);
+}
+
+function normalizeTzPhone(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (digits.startsWith("255")) return digits;
+  if (digits.startsWith("0")) return "255" + digits.slice(1);
+  return "255" + digits;
+}
+
+async function waitForPayment(paymentId, tournamentId, shareUrl) {
+  paymentFormState.hidden = true;
+  paymentWaitingState.hidden = false;
+  paymentConfirm.disabled = true;
+
+  const deadline = Date.now() + 2 * 60 * 1000;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`api/payments/status.php?payment_id=${encodeURIComponent(paymentId)}`, {
+        credentials: "same-origin",
+        cache: "no-store"
+      });
+      const data = await res.json();
+      if (data.success && data.status) {
+        if (data.status === "paid") {
+          paymentWaitingMessage.textContent = "Payment confirmed. Your tournament is ready.";
+          closePaymentModal();
+          if (document.getElementById("t-visibility").value === "private" && await KickoffUI.confirm({ title: "Private Invite", message: "Tournament created. Copy the private invite link?", okText: "Copy Link" })) {
+            const url = new URL(shareUrl || `tournament_detail.html?id=${tournamentId}`, window.location.href).href;
+            if (navigator.clipboard) {
+              await navigator.clipboard.writeText(url);
+              KickoffUI.toast("Private invite link copied.", "success");
+            }
+          }
+          window.location.href = `tournament_detail.html?id=${tournamentId}`;
+          return true;
+        }
+        if (["failed", "expired", "cancelled"].includes(data.status)) {
+          throw new Error("The payment was not completed. The tournament reservation is still pending and can be reviewed from your tournaments.");
+        }
+      }
+    } catch (error) {
+      if (error && error.message && error.message.startsWith("The payment was not completed")) throw error;
+    }
+    await new Promise(resolve => setTimeout(resolve, 4000));
+  }
+  throw new Error("The payment is still pending. Please check your phone and your tournament payments before trying again.");
+}
+
 document.getElementById("create-form").addEventListener("submit", async event => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -261,10 +388,26 @@ document.getElementById("create-form").addEventListener("submit", async event =>
       return;
     }
   }
-  if (document.getElementById("t-funding").value === "participant_funded" && Number(document.getElementById("t-entry-fee").value || 0) <= 0) {
+  const isPaid = document.getElementById("t-funding").value === "participant_funded";
+  const entryFee = Number(document.getElementById("t-entry-fee").value || 0);
+  if (isPaid && entryFee <= 0) {
     KickoffUI.showFormError(form, "Participant-funded tournaments need an entry fee above zero.", { errorId: "create-error", field: "#t-entry-fee", title: "Tournament needs attention" });
     return;
   }
+
+  if (isPaid) {
+    openPaymentModal(entryFee);
+    return;
+  }
+
+  try {
+    await submitTournament(form, btn, null);
+  } catch (error) {
+    KickoffUI.showFormError(form, error.message || "Network error. Please check your connection and try again.", { errorId: "create-error", title: "Tournament could not be created" });
+  }
+});
+
+async function submitTournament(form, btn, paymentPhoneNumber) {
   const body = {
     name: document.getElementById("t-name").value.trim(),
     format: document.getElementById("t-format").value,
@@ -279,35 +422,61 @@ document.getElementById("create-form").addEventListener("submit", async event =>
     funding_model: document.getElementById("t-funding").value,
     entry_fee_amount: Number(document.getElementById("t-entry-fee").value || 0)
   };
+  if (paymentPhoneNumber) body.payment_phone = paymentPhoneNumber;
 
-  await KickoffUI.withButtonLoading(btn, "Creating tournament...", async () => {
-    try {
-      const res = await fetch("api/tournaments/create.php", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify(body)
-      });
-      const data = await res.json();
-      if (!data.success) {
-        KickoffUI.showFormError(form, data.error || "Failed to create tournament.", { errorId: "create-error", title: "Tournament could not be created" });
-        return;
-      }
-      if (body.visibility === "private" && await KickoffUI.confirm({ title: "Private Invite", message: "Tournament created. Copy the private invite link?", okText: "Copy Link" })) {
-        const url = new URL(data.share_url || `tournament_detail.html?id=${data.tournament_id}`, window.location.href).href;
-        if (navigator.clipboard) {
-          await navigator.clipboard.writeText(url);
-          KickoffUI.toast("Private invite link copied.", "success");
-        } else {
-          await KickoffUI.prompt({ title: "Copy Private Invite", message: url, value: url, okText: "Done" });
-        }
-      }
-      window.location.href = `tournament_detail.html?id=${data.tournament_id}`;
-    } catch (error) {
-      KickoffUI.showFormError(form, "Network error. Please check your connection and try again.", { errorId: "create-error", title: "Tournament could not be created" });
-    }
+  const response = await fetch("api/tournaments/create.php", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify(body)
   });
+  const data = await response.json();
+  if (!data.success) {
+    throw new Error(data.error || "Failed to create tournament.");
+  }
+
+  if (data.payment && data.payment.required) {
+    try {
+      await waitForPayment(data.payment.payment_id, data.tournament_id, data.share_url);
+    } catch (error) {
+      closePaymentModal();
+      KickoffUI.showFormError(form, error.message || "Payment is still pending. Please check your phone.", { errorId: "create-error", title: "Payment not completed" });
+    }
+    return;
+  }
+
+  if (body.visibility === "private" && await KickoffUI.confirm({ title: "Private Invite", message: "Tournament created. Copy the private invite link?", okText: "Copy Link" })) {
+    const url = new URL(data.share_url || `tournament_detail.html?id=${data.tournament_id}`, window.location.href).href;
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(url);
+      KickoffUI.toast("Private invite link copied.", "success");
+    }
+  }
+  window.location.href = `tournament_detail.html?id=${data.tournament_id}`;
+}
+
+paymentConfirm.addEventListener("click", async () => {
+  const form = document.getElementById("create-form");
+  const btn = document.getElementById("create-btn");
+  if (!validTzPhone(paymentPhone.value)) {
+    paymentError.textContent = "Enter a valid Tanzanian mobile-money number, for example 0712345678.";
+    paymentError.style.display = "block";
+    paymentPhone.focus();
+    return;
+  }
+  paymentError.style.display = "none";
+  paymentConfirm.disabled = true;
+  paymentCancel.disabled = true;
+  try {
+    await submitTournament(form, btn, normalizeTzPhone(paymentPhone.value));
+  } catch (error) {
+    paymentConfirm.disabled = false;
+    paymentCancel.disabled = false;
+    paymentError.textContent = error.message || "The payment request could not be started.";
+    paymentError.style.display = "block";
+  }
 });
+
 
 initCatalog().finally(() => {
   updateFormatRules();

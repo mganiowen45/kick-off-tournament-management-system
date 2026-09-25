@@ -21,6 +21,7 @@ const params      = new URLSearchParams(location.search);
 let profileId     = params.get('id');
 let currentUser   = null;
 let isOwnProfile  = false;
+let profileTournaments = [];
 const esc = value => (window.KickoffUI && window.KickoffUI.escapeHtml ? window.KickoffUI.escapeHtml(value) : String(value ?? ''));
 
 function timeAgo(dt) {
@@ -87,12 +88,15 @@ async function load() {
     </div>
 
     <div class="tab-pane" id="tab-tournaments">
-      ${data.tournaments.length ? data.tournaments.map(t => `
-        <div class="history-row" onclick="location.href='tournament_detail.html?id=${t.id}'" style="cursor:pointer;">
-          <div><div class="hr-opp">${t.name}</div><div class="hr-tour">${t.format} · ${t.status}</div></div>
-          <span class="badge badge-${t.status==='active'?'live':t.status==='open'?'open':'soon'}">${t.status}</span>
-        </div>`).join('')
-        : '<div style="color:var(--muted);padding:.5rem 0;">No tournaments yet.</div>'}
+      <div class="t-tab-stats" id="tournaments-stats"></div>
+      <div class="filters" style="margin-bottom:1rem;">
+        <button type="button" class="filter-btn active" onclick="setTournamentFilter(this,'all')">All</button>
+        <button type="button" class="filter-btn" onclick="setTournamentFilter(this,'created')">Created</button>
+        <button type="button" class="filter-btn" onclick="setTournamentFilter(this,'won')">Won</button>
+        <button type="button" class="filter-btn" onclick="setTournamentFilter(this,'in_progress')">Ongoing</button>
+        <button type="button" class="filter-btn" onclick="setTournamentFilter(this,'upcoming')">Upcoming</button>
+      </div>
+      <div id="tournaments-list"></div>
     </div>
 
     ${isOwnProfile ? `
@@ -142,6 +146,9 @@ async function load() {
       </div>
     </div>` : ''}
   `;
+  profileTournaments = data.tournaments || [];
+  renderTournamentsStats(profileTournaments);
+  renderTournamentsList('all');
 }
 
 function switchTab(btn, id) {
@@ -149,6 +156,67 @@ function switchTab(btn, id) {
   document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('tab-'+id).classList.add('active');
+}
+
+function tournamentStatusMeta(t) {
+  const map = {
+    won:         { label: 'Won',         cls: 'badge-win' },
+    lost:        { label: 'Lost',        cls: 'badge-loss' },
+    in_progress: { label: 'In Progress', cls: 'badge-live' },
+    upcoming:    { label: t.status === 'open' ? 'Open' : 'Upcoming', cls: 'badge-open' },
+    withdrawn:   { label: 'Withdrawn',   cls: 'badge-pending' },
+    cancelled:   { label: 'Cancelled',   cls: 'badge-loss' },
+  };
+  return map[t.result_status] || { label: t.status, cls: 'badge-soon' };
+}
+
+function renderTournamentsStats(list) {
+  const box = document.getElementById('tournaments-stats');
+  if (!box) return;
+  const created = list.filter(t => t.is_creator).length;
+  const won = list.filter(t => t.result_status === 'won').length;
+  const ongoing = list.filter(t => t.result_status === 'in_progress').length;
+  const upcoming = list.filter(t => t.result_status === 'upcoming').length;
+  box.innerHTML = `
+    <div class="stats-row" style="margin-bottom:1.25rem;">
+      <div class="stat-card"><span class="stat-num">${list.length}</span><span class="stat-label">Total</span></div>
+      <div class="stat-card"><span class="stat-num">${created}</span><span class="stat-label">Created</span></div>
+      <div class="stat-card"><span class="stat-num">${won}</span><span class="stat-label">Won</span></div>
+      <div class="stat-card"><span class="stat-num">${ongoing}</span><span class="stat-label">Ongoing</span></div>
+      <div class="stat-card"><span class="stat-num">${upcoming}</span><span class="stat-label">Upcoming</span></div>
+    </div>`;
+}
+
+function setTournamentFilter(btn, filter) {
+  document.querySelectorAll('#tab-tournaments .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTournamentsList(filter);
+}
+
+function renderTournamentsList(filter) {
+  const box = document.getElementById('tournaments-list');
+  if (!box) return;
+  const list = (profileTournaments || []).filter(t => {
+    if (filter === 'all') return true;
+    if (filter === 'created') return t.is_creator;
+    return t.result_status === filter;
+  });
+  box.innerHTML = list.length ? list.map(t => {
+    const meta = tournamentStatusMeta(t);
+    const when = t.completed_at ? new Date(t.completed_at).toLocaleDateString('en',{month:'short',day:'numeric',year:'numeric'})
+      : (t.start_date ? new Date(t.start_date).toLocaleDateString('en',{month:'short',day:'numeric',year:'numeric'}) : '');
+    return `
+    <div class="history-row" onclick="location.href='tournament_detail.html?id=${t.id}'" style="cursor:pointer;display:flex;align-items:center;gap:12px;">
+      <div style="width:40px;height:40px;border-radius:4px;overflow:hidden;flex-shrink:0;">
+        ${t.cover_image_url ? `<img src="${esc(t.cover_image_url)}" style="width:100%;height:100%;object-fit:cover;" alt="">` : `<div style="width:100%;height:100%;background:var(--surface);display:flex;align-items:center;justify-content:center;font-weight:bold;color:var(--text);font-size:14px;">${esc((t.name||'T').substring(0,1).toUpperCase())}</div>`}
+      </div>
+      <div style="flex:1;">
+        <div class="hr-opp">${esc(t.name)}${t.is_creator ? ' <span class="badge badge-1v1" style="margin-left:.4rem;">Organizer</span>' : ''}</div>
+        <div class="hr-tour">${esc(t.format_label || t.format)} · ${Number(t.current_players||0)}/${Number(t.max_players||0)} players${when ? ' · ' + when : ''}</div>
+      </div>
+      <span class="badge ${meta.cls}">${meta.label}</span>
+    </div>`;
+  }).join('') : '<div style="color:var(--muted);padding:.5rem 0;">No tournaments in this category yet.</div>';
 }
 
 async function loadPayoutMethods() {

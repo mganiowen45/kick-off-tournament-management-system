@@ -15,9 +15,11 @@ ServerSignature Off
     Require all denied
 </FilesMatch>
 
-# Block sensitive server-side folders while allowing the shared navigation script.
 <IfModule mod_rewrite.c>
     RewriteEngine On
+    RewriteRule ^\.git/ - [F,L]
+    RewriteRule ^database/ - [F,L]
+    RewriteRule ^app/ - [F,L]
     RewriteRule ^config/ - [F,L]
     RewriteRule ^includes/(?!nav\.js$).* - [F,L]
 </IfModule>

@@ -96,9 +96,21 @@
   function financeInfo(t) {
     const currency = t.currency || "TZS";
     const model = String(t.funding_model || "free_casual");
+    const status = String(t.status || "open");
+    const full = Number(t.max_players) > 0 && Number(t.current_players) >= Number(t.max_players);
+
+    let prizeLabel = "EST. PRIZE POOL";
+    if (status === "completed") {
+      prizeLabel = t.winner_paid ? "PRIZE PAID" : "FINAL PRIZE";
+    } else if (status === "active") {
+      prizeLabel = "FINAL PRIZE POOL";
+    } else if (full) {
+      prizeLabel = "PROJECTED PRIZE";
+    }
+
     if (model === "participant_funded") {
       return {
-        prizeLabel: "EST. PRIZE POOL",
+        prizeLabel: prizeLabel,
         prizeValue: money(t.prize_pool_amount, currency) || esc(t.prize_pool || "TBA"),
         entryValue: money(t.entry_fee_amount, currency) || "TZS 0",
         note: "Participant-Funded Tournament"
@@ -106,7 +118,7 @@
     }
     if (model === "kickoff_sponsored") {
       return {
-        prizeLabel: "PRIZE POOL",
+        prizeLabel: status === "completed" ? "FINAL PRIZE" : "GUARANTEED PRIZE",
         prizeValue: money(t.prize_pool_amount || t.kickoff_contribution_amount, currency) || esc(t.prize_pool || "TBA"),
         entryValue: "FREE",
         note: "KICKOFF-Sponsored Tournament"

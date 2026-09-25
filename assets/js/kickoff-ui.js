@@ -201,6 +201,9 @@
         clone.json().then(data => {
           if (data && data.csrf_token) csrfToken = data.csrf_token;
           if (data && data.user && data.user.theme_preference) window.KickoffUI.setTheme(data.user.theme_preference);
+          if (data && (data.code === 'MFA_SETUP_REQUIRED' || data.code === 'MFA_REQUIRED') && data.redirect) {
+            window.location.href = data.redirect;
+          }
         }).catch(() => {});
       }
     } catch (error) {}

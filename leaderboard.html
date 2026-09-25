@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -57,7 +57,7 @@ async function loadLeaderboard(page) {
     const wrWidth = Math.round(p.win_rate_pct);
     return `<tr class="${isMe?'me':''}">
       <td><span class="rnk ${rnkCls}">${rank}</span></td>
-      <td><div class="pc"><div class="pav" style="background:${avBg};color:${avTxt};"><img src="${esc(p.avatar_url)}" alt=""></div>
+      <td><div class="pc"><div class="pav" style="background:${avBg};color:${avTxt};overflow:hidden;">${p.avatar_url ? `<img src="${esc(p.avatar_url)}" style="width:100%;height:100%;object-fit:cover;" alt="">` : esc(p.username.substring(0,2).toUpperCase())}</div>
         <div><div class="pname" style="${isMe?'color:var(--lime)':''}">${esc(p.username)}${isMe?' *':''}</div></div></div></td>
       <td style="color:var(--muted);font-size:.85rem;">${esc(p.country||'-')}</td>
       <td style="color:var(--muted);">${p.total_matches}</td>

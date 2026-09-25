@@ -61,6 +61,43 @@ final class DisputeController
         Response::success($service->resolveDispute((int) $admin['id'], $request->data()), 'Dispute resolved.');
     }
 
+    public function evidence(Request $request): never
+    {
+        $request->requireMethod('GET');
+        $user = Auth::requireUser();
+        $file = basename((string) $request->query('file', ''));
+        if (!preg_match('/^[A-Za-z0-9_-]+\.(?:jpg|jpeg|png|webp)$/i', $file)) {
+            throw new HttpException('Invalid file request.', 400);
+        }
+
+        $path = UPLOAD_DIR . 'results/' . $file;
+        if (!is_file($path)) {
+            throw new HttpException('Evidence not found.', 404);
+        }
+
+        if ($user['role'] !== 'admin') {
+            $stmt = $this->pdo->prepare("
+                SELECT 1 FROM match_results mr
+                JOIN matches m ON m.id = mr.match_id
+                WHERE mr.screenshot_url LIKE :file
+                  AND (m.player1_id = :uid OR m.player2_id = :uid)
+                LIMIT 1
+            ");
+            $stmt->execute([':file' => '%' . $file, ':uid' => $user['id']]);
+            if (!$stmt->fetchColumn()) {
+                throw new HttpException('Access denied to this evidence.', 403);
+            }
+        }
+
+        $mime = mime_content_type($path) ?: 'application/octet-stream';
+        header('Content-Type: ' . $mime);
+        header('Content-Length: ' . filesize($path));
+        header('Cache-Control: private, max-age=86400');
+        readfile($path);
+        exit;
+    }
+
+
     private function decorateDispute(array $row): array
     {
         $row['player1_avatar_url'] = AvatarCatalog::url($row['player1_avatar'] ?? null);

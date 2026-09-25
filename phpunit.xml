@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="tests/bootstrap.php"
+         colors="true"
+         cacheDirectory=".phpunit.cache">
+    <testsuites>
+        <testsuite name="Security">
+            <directory>tests/Security</directory>
+        </testsuite>
+        <testsuite name="Tournament">
+            <directory>tests/Tournament</directory>
+        </testsuite>
+        <testsuite name="Financial">
+            <directory>tests/Financial</directory>
+        </testsuite>
+        <testsuite name="Concurrency">
+            <directory>tests/Concurrency</directory>
+        </testsuite>
+        <testsuite name="E2E">
+            <directory>tests/E2E</directory>
+        </testsuite>
+    </testsuites>
+</phpunit>

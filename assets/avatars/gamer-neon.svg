@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Neon gamer avatar">
-  <defs><linearGradient id="b" x2="1" y2="1"><stop stop-color="#07131c"/><stop offset="1" stop-color="#10182a"/></linearGradient></defs>
-  <rect width="256" height="256" rx="48" fill="url(#b)"/><circle cx="128" cy="102" r="55" fill="#d89b74"/>
-  <path d="M72 98c1-50 24-70 57-70 35 0 58 25 57 74l-20-24-76 3z" fill="#152038"/>
-  <path d="M54 239c6-58 31-87 74-87s69 29 75 87" fill="#b5f500"/>
-  <path d="M83 103h38l-8 25H87zm52 0h38l-4 25h-27z" fill="#07131c" stroke="#00d9f5" stroke-width="7"/>
-  <path d="M120 113h16" stroke="#00d9f5" stroke-width="7"/><path d="M107 140q21 14 42 0" fill="none" stroke="#6b382d" stroke-width="6" stroke-linecap="round"/>
-</svg>

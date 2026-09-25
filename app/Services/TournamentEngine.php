@@ -323,21 +323,13 @@ final class TournamentEngine
         $groups->execute([':id' => $tournamentId]);
         foreach ($groups->fetchAll(PDO::FETCH_ASSOC) as $group) {
             $groupId = (int) $group['id'];
-            $rows = $this->pdo->prepare(
-                "SELECT tp.user_id, tp.league_points, tp.goals_for, tp.goals_against, tp.wins, tp.draws, tp.losses
-                 FROM tournament_group_members gm
-                 JOIN tournament_players tp ON tp.tournament_id = gm.tournament_id AND tp.user_id = gm.user_id
-                 WHERE gm.group_id = :group_id
-                 ORDER BY tp.user_id ASC"
-            );
-            $rows->execute([':group_id' => $groupId]);
-            $ranked = $this->rankGroup($tournamentId, $groupId, $rows->fetchAll(PDO::FETCH_ASSOC));
+            $ranked = $this->calculateStandings($tournamentId, $groupId);
             $qualifiersByGroup[] = array_slice(array_column($ranked, 'user_id'), 0, 2);
             foreach ($ranked as $rank => $row) {
                 $this->pdo->prepare(
                     'UPDATE tournament_group_members SET rank_position = :rank, qualified_at = :qualified_at WHERE group_id = :group AND user_id = :user'
                 )->execute([
-                    ':rank' => $rank + 1,
+                    ':rank' => $row['position'],
                     ':qualified_at' => $rank < 2 ? date('Y-m-d H:i:s') : null,
                     ':group' => $groupId,
                     ':user' => (int) $row['user_id'],
@@ -360,46 +352,142 @@ final class TournamentEngine
         $this->generateKnockoutBracket($tournament, $seeded, 'knockout');
     }
 
-    private function rankGroup(int $tournamentId, int $groupId, array $rows): array
+    public function calculateStandings(int $tournamentId, int $groupId): array
     {
-        usort($rows, function (array $a, array $b) use ($tournamentId, $groupId): int {
-            foreach ([
-                (int) $b['league_points'] <=> (int) $a['league_points'],
-                ((int) $b['goals_for'] - (int) $b['goals_against']) <=> ((int) $a['goals_for'] - (int) $a['goals_against']),
-                (int) $b['goals_for'] <=> (int) $a['goals_for'],
-                $this->headToHeadPoints($tournamentId, $groupId, (int) $b['user_id'], (int) $a['user_id']),
-                (int) $a['user_id'] <=> (int) $b['user_id'],
-            ] as $result) {
-                if ($result !== 0) return $result;
-            }
-            return 0;
-        });
-        return $rows;
+        $rows = $this->pdo->prepare(
+            "SELECT tp.user_id, u.username, u.country, u.avatar_url,
+                    tp.league_points, tp.goals_for, tp.goals_against, tp.wins, tp.draws, tp.losses,
+                    (tp.goals_for - tp.goals_against) AS goal_diff, gm.rank_position, gm.qualified_at
+             FROM tournament_group_members gm
+             JOIN tournament_players tp ON tp.tournament_id = gm.tournament_id AND tp.user_id = gm.user_id
+             JOIN users u ON u.id = tp.user_id
+             WHERE gm.group_id = :group_id AND tp.status != 'withdrawn'"
+        );
+        $rows->execute([':group_id' => $groupId]);
+        $players = $rows->fetchAll(PDO::FETCH_ASSOC);
+
+        // Sort using the recursive multi-team tie-breaker
+        $ranked = $this->resolveTieBreaker($tournamentId, $groupId, $players);
+
+        // Assign ranks (1-indexed)
+        foreach ($ranked as $index => &$player) {
+            $player['position'] = $index + 1;
+        }
+        return $ranked;
     }
 
-    private function headToHeadPoints(int $tournamentId, int $groupId, int $leftUserId, int $rightUserId): int
+    private function resolveTieBreaker(int $tournamentId, int $groupId, array $players): array
     {
-        $stmt = $this->pdo->prepare(
-            "SELECT player1_id, player2_id, winner_id, is_draw
+        if (count($players) <= 1) {
+            return $players;
+        }
+
+        // Group players by primary stats: points, goal diff, goals for, wins
+        $groups = [];
+        foreach ($players as $p) {
+            $key = sprintf('%04d|%04d|%04d|%04d',
+                (int) $p['league_points'],
+                5000 + (int) $p['goal_diff'], // Offset to handle negative goal diffs gracefully in string sorting
+                (int) $p['goals_for'],
+                (int) $p['wins']
+            );
+            $groups[$key][] = $p;
+        }
+
+        // Sort the keys descending
+        krsort($groups);
+
+        $result = [];
+        foreach ($groups as $tiedPlayers) {
+            if (count($tiedPlayers) === 1) {
+                $result[] = $tiedPlayers[0];
+                continue;
+            }
+
+            // Multi-team tie: apply head-to-head points mini-league among tied players
+            $tiedIds = array_column($tiedPlayers, 'user_id');
+            $h2hStats = $this->calculateMiniLeague($tournamentId, $groupId, $tiedIds);
+
+            // Group by H2H points, H2H goal diff, H2H goals scored
+            $h2hGroups = [];
+            foreach ($tiedPlayers as $p) {
+                $uid = $p['user_id'];
+                $stats = $h2hStats[$uid];
+                $key = sprintf('%04d|%04d|%04d',
+                    $stats['pts'],
+                    5000 + $stats['gd'],
+                    $stats['gf']
+                );
+                $h2hGroups[$key][] = $p;
+            }
+
+            krsort($h2hGroups);
+
+            foreach ($h2hGroups as $h2hTiedPlayers) {
+                if (count($h2hTiedPlayers) === 1) {
+                    $result[] = $h2hTiedPlayers[0];
+                } elseif (count($h2hTiedPlayers) < count($tiedPlayers)) {
+                    // Subset tie: recurse
+                    $result = array_merge($result, $this->resolveTieBreaker($tournamentId, $groupId, $h2hTiedPlayers));
+                } else {
+                    // Unbreakable tie among these players even after H2H. Fallback to ID sorting for determinism.
+                    usort($h2hTiedPlayers, fn($a, $b) => (int) $a['user_id'] <=> (int) $b['user_id']);
+                    $result = array_merge($result, $h2hTiedPlayers);
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    private function calculateMiniLeague(int $tournamentId, int $groupId, array $userIds): array
+    {
+        $stats = [];
+        foreach ($userIds as $uid) {
+            $stats[$uid] = ['pts' => 0, 'gd' => 0, 'gf' => 0, 'ga' => 0];
+        }
+
+        if (count($userIds) < 2) return $stats;
+
+        $inList = implode(',', array_map('intval', $userIds));
+        $matches = $this->pdo->prepare(
+            "SELECT player1_id, player2_id, player1_score, player2_score, winner_id, is_draw
              FROM matches
              WHERE tournament_id = :tournament AND group_id = :group
                AND status = 'confirmed'
-               AND ((player1_id = :left_user AND player2_id = :right_user)
-                    OR (player1_id = :right_user2 AND player2_id = :left_user2))
-             LIMIT 1"
+               AND player1_id IN ($inList) AND player2_id IN ($inList)"
         );
-        $stmt->execute([
-            ':tournament' => $tournamentId,
-            ':group' => $groupId,
-            ':left_user' => $leftUserId,
-            ':right_user' => $rightUserId,
-            ':right_user2' => $rightUserId,
-            ':left_user2' => $leftUserId,
-        ]);
-        $match = $stmt->fetch(PDO::FETCH_ASSOC);
-        if (!$match) return 0;
-        if ((int) $match['is_draw'] === 1) return 0;
-        return (int) $match['winner_id'] === $leftUserId ? 1 : -1;
+        $matches->execute([':tournament' => $tournamentId, ':group' => $groupId]);
+
+        foreach ($matches->fetchAll(PDO::FETCH_ASSOC) as $m) {
+            $p1 = (int) $m['player1_id'];
+            $p2 = (int) $m['player2_id'];
+            if (!isset($stats[$p1]) || !isset($stats[$p2])) continue;
+
+            if ((int) $m['is_draw'] === 1) {
+                $stats[$p1]['pts'] += 1;
+                $stats[$p2]['pts'] += 1;
+            } elseif ((int) $m['winner_id'] === $p1) {
+                $stats[$p1]['pts'] += 3;
+            } elseif ((int) $m['winner_id'] === $p2) {
+                $stats[$p2]['pts'] += 3;
+            }
+
+            // Using scores if available (assuming scores are populated for some games)
+            $s1 = (int) ($m['player1_score'] ?? 0);
+            $s2 = (int) ($m['player2_score'] ?? 0);
+            
+            $stats[$p1]['gf'] += $s1;
+            $stats[$p1]['ga'] += $s2;
+            $stats[$p2]['gf'] += $s2;
+            $stats[$p2]['ga'] += $s1;
+        }
+
+        foreach ($stats as $uid => &$s) {
+            $s['gd'] = $s['gf'] - $s['ga'];
+        }
+
+        return $stats;
     }
 
     private function seedGroupQualifiers(array $groups): array

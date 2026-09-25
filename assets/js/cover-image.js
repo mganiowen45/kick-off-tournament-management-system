@@ -76,8 +76,9 @@
     const url = coverUrl(t);
     const seed = esc(options.seed || (t && t.name) || "");
     const cls = options.className ? `tc-cover-img ${options.className}` : "tc-cover-img";
+    const style = options.style ? ` style="${esc(options.style)}"` : "";
     const fallback = placeholderDataUri(options.seed || (t && t.name));
-    return `<img class="${cls}" src="${esc(url)}" alt="" loading="lazy" data-cover-seed="${seed}" `
+    return `<img class="${cls}"${style} src="${esc(url)}" alt="" loading="lazy" data-cover-seed="${seed}" `
       + `onerror="this.onerror=null;this.src='${fallback}';this.classList.add('tc-cover-fallback');">`;
   }
 

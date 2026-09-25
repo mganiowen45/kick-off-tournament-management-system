@@ -92,16 +92,30 @@ async function init() {
         </div>`).join('')
     : '<div style="color:var(--lime);font-family:var(--font-b);font-size:.82rem;padding:.5rem 0;">✓ No open disputes</div>';
 
-  // Users list (new today) — load from users_list
-  const uRes  = await fetch('../api/admin/users_list.php?limit=4&page=1');
+  // Active Tournaments
+  const tRes = await fetch('api/tournaments/list.php?status=active&limit=4');
+  const tData = await tRes.json();
+  const tList = tData.tournaments || [];
+  document.getElementById('tournaments-list').innerHTML = tList.length 
+    ? tList.slice(0, 4).map(t => `<div class="user-row" style="cursor:pointer;" onclick="location.href='tournament_detail.html?id=${t.id}'">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <img src="${t.cover_image_url}" alt="" style="width:40px;height:40px;border-radius:4px;object-fit:cover;">
+          <div><div class="u-name">${KickoffUI.escapeHtml(t.name)}</div><div class="u-sub">${KickoffUI.escapeHtml(t.format_label)}</div></div>
+        </div>
+        <span class="badge badge-open">${t.current_players}/${t.max_players}</span>
+      </div>`).join('')
+    : '<div style="color:var(--muted);font-size:.82rem;">No active tournaments.</div>';
+
+  // Users list (new today)
+  const uRes  = await fetch('api/admin/users_list.php?limit=4&page=1&new_today=1');
   const uData = await uRes.json();
   document.getElementById('users-list').innerHTML = (uData.users||[]).slice(0,4).map(u => `
     <div class="user-row">
       <div style="display:flex;align-items:center;gap:8px;">
-        <div class="u-av">${u.username.substring(0,2).toUpperCase()}</div>
-        <div><div class="u-name">${u.username}</div><div class="u-sub">🌍 ${u.country||'?'} · ${u.preferred_game||'?'}</div></div>
+        <div class="p-av" style="width:32px;height:32px;">${u.avatar_url ? `<img src="${KickoffUI.escapeHtml(u.avatar_url)}" alt="">` : `<div class="u-av">${KickoffUI.escapeHtml(u.username).substring(0,2).toUpperCase()}</div>`}</div>
+        <div><div class="u-name">${KickoffUI.escapeHtml(u.username)}</div><div class="u-sub">🌍 ${KickoffUI.escapeHtml(u.country||'?')} · ${KickoffUI.escapeHtml(u.preferred_game||'?')}</div></div>
       </div>
-      <span class="badge badge-open">Active</span>
+      <span class="badge badge-open">New</span>
     </div>`).join('') || '<div style="color:var(--muted);font-size:.82rem;">No new users today</div>';
 
   // Weekly chart

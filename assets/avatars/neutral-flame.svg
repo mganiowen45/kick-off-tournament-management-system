@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Flame neutral avatar">
-  <rect width="256" height="256" rx="48" fill="#250c07"/><path d="M128 22c18 42 62 58 62 112 0 48-27 88-62 88s-62-40-62-88c0-29 14-52 41-77-2 30 9 38 21 44 15-24 11-49 0-79z" fill="#ff4e00"/>
-  <path d="M128 92c13 22 31 37 31 65 0 26-14 46-31 46s-31-20-31-46c0-19 11-34 22-45-1 15 3 24 9 29 8-13 7-30 0-49z" fill="#f5a623"/>
-  <circle cx="115" cy="159" r="6" fill="#2b110a"/><circle cx="141" cy="159" r="6" fill="#2b110a"/><path d="M113 180h30" stroke="#2b110a" stroke-width="6" stroke-linecap="round"/>
-</svg>

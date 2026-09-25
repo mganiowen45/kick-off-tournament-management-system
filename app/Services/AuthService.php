@@ -87,10 +87,9 @@ final class AuthService
             throw new HttpException('Username/email and password are required.', 422);
         }
 
-        $attemptKey = hash('sha256', $ip . '|' . strtolower($identifier));
-        if ($this->tooManyAttempts($attemptKey)) {
-            throw new HttpException('Too many login attempts. Try again in 15 minutes.', 429);
-        }
+        $limiter = new \App\Core\RateLimiter($this->pdo);
+        $attemptKey = 'login|' . $ip . '|' . strtolower($identifier);
+        $limiter->limit($attemptKey, 10, 15);
 
         $stmt = $this->pdo->prepare('SELECT * FROM users WHERE username = :username OR email = :email LIMIT 1');
         $stmt->execute([':username' => $identifier, ':email' => strtolower($identifier)]);
@@ -98,15 +97,13 @@ final class AuthService
 
         $dummy = '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.';
         if (!$user || !password_verify($password, (string) ($user['password_hash'] ?? $dummy))) {
-            $this->recordFailure($attemptKey);
             throw new HttpException('Incorrect username or password.', 401);
         }
         if ($user['status'] === 'banned') {
-            $this->recordFailure($attemptKey);
             throw new HttpException('Your account is suspended. Contact an administrator.', 403);
         }
 
-        $this->clearAttempts($attemptKey);
+        $limiter->clear($attemptKey);
         if (password_needs_rehash((string) $user['password_hash'], PASSWORD_DEFAULT)) {
             $this->pdo->prepare('UPDATE users SET password_hash = :hash WHERE id = :id')
                 ->execute([':hash' => password_hash($password, PASSWORD_DEFAULT), ':id' => $user['id']]);
@@ -137,33 +134,5 @@ final class AuthService
         return $user;
     }
 
-    private function tooManyAttempts(string $key): bool
-    {
-        $stmt = $this->pdo->prepare(
-            'SELECT attempts, first_attempt_at FROM login_attempts WHERE attempt_key = :key LIMIT 1'
-        );
-        $stmt->execute([':key' => $key]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        return $row
-            && (int) $row['attempts'] >= 10
-            && strtotime((string) $row['first_attempt_at']) > time() - 900;
-    }
 
-    private function recordFailure(string $key): void
-    {
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO login_attempts (attempt_key, attempts, first_attempt_at, last_attempt_at)
-             VALUES (:key, 1, NOW(), NOW())
-             ON DUPLICATE KEY UPDATE
-               attempts = IF(first_attempt_at < DATE_SUB(NOW(), INTERVAL 15 MINUTE), 1, attempts + 1),
-               first_attempt_at = IF(first_attempt_at < DATE_SUB(NOW(), INTERVAL 15 MINUTE), NOW(), first_attempt_at),
-               last_attempt_at = NOW()'
-        );
-        $stmt->execute([':key' => $key]);
-    }
-
-    private function clearAttempts(string $key): void
-    {
-        $this->pdo->prepare('DELETE FROM login_attempts WHERE attempt_key = :key')->execute([':key' => $key]);
-    }
 }

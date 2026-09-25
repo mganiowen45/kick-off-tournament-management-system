@@ -29,9 +29,11 @@ final class PayoutService
             $method=$this->getDefaultMethod((int)$t['winner_id']);
             if (!$method) throw new HttpException('Winner has no verified payout destination. Ask the winner to add a mobile-money payout number.',409);
             $reference=$this->ensurePayoutRow($t,$prize,$method);
-            $preview=$this->clickPesa->previewMobileMoneyPayout(['amount'=>$prize['amount'],'currency'=>$prize['currency'],'phone_number'=>$method['phone_number'],'order_reference'=>$reference]);
-            $this->pdo->prepare("UPDATE payouts SET payout_method_id=:m, recipient_phone=:phone, provider_fee=:fee, previewed_at=NOW(), status=IF(status='pending','approved',status), last_error=NULL WHERE id=:id")->execute([':m'=>$method['id'],':phone'=>$method['phone_number'],':fee'=>$preview['fee']??null,':id'=>$this->payoutId($reference)]);
-            $this->audit->record((int)$admin['id'],'payout_previewed','tournament',$tournamentId,['reference'=>$reference,'amount'=>$prize['amount'],'fee'=>$preview['fee']??null]);
+            // No automated ClickPesa API exists yet for preview. 
+            // We set fee to 0 and proceed internally.
+            $preview = ['fee' => 0];
+            $this->pdo->prepare("UPDATE payouts SET payout_method_id=:m, recipient_phone=:phone, provider_fee=:fee, previewed_at=NOW(), status=IF(status='pending','approved',status), last_error=NULL WHERE id=:id")->execute([':m'=>$method['id'],':phone'=>$method['phone_number'],':fee'=>$preview['fee'],':id'=>$this->payoutId($reference)]);
+            $this->audit->record((int)$admin['id'],'payout_previewed','tournament',$tournamentId,['reference'=>$reference,'amount'=>$prize['amount'],'fee'=>$preview['fee']]);
             return ['payout_id'=>$this->payoutId($reference),'reference'=>$reference,'winner_id'=>(int)$t['winner_id'],'winner_username'=>$this->winnerName((int)$t['winner_id']),'amount'=>(float)$prize['amount'],'currency'=>$prize['currency'],'phone_number'=>$method['phone_number'],'preview'=>$preview,'status'=>'approved'];
         });
     }
@@ -62,23 +64,30 @@ final class PayoutService
         if (!$method) throw new HttpException('Verified payout destination is unavailable.', 409);
 
         try {
-            $preview = $this->clickPesa->previewMobileMoneyPayout(['amount'=>$row['amount'], 'currency'=>$row['currency'], 'phone_number'=>$method['phone_number'], 'order_reference'=>$row['payout_reference']]);
-            $provider = $this->clickPesa->createMobileMoneyPayout(['amount'=>$row['amount'], 'currency'=>$row['currency'], 'phone_number'=>$method['phone_number'], 'order_reference'=>$row['payout_reference']]);
-            $status = $this->mapProviderStatus($provider['status'] ?? 'PROCESSING');
-            $this->pdo->prepare("UPDATE payouts SET status=:status, provider_reference=:provider, provider_status=:provider_status, provider_fee=:fee, submitted_at=COALESCE(submitted_at,NOW()), last_provider_check_at=NOW(), last_error=NULL WHERE id=:id AND status='processing'")
-                ->execute([':status'=>$status, ':provider'=>$provider['provider_reference']??null, ':provider_status'=>$provider['status']??null, ':fee'=>$provider['fee']??($preview['fee']??null), ':id'=>$row['id']]);
+            // No automated ClickPesa API exists yet for payout creation.
+            // We set status to processing, requiring manual dashboard action.
+            $status = 'processing';
+            $this->pdo->prepare("UPDATE payouts SET status=:status, provider_reference=NULL, provider_status='PROCESSING', provider_fee=0, submitted_at=COALESCE(submitted_at,NOW()), last_provider_check_at=NOW(), last_error=NULL WHERE id=:id AND status='processing'")
+                ->execute([':status'=>$status, ':id'=>$row['id']]);
             $fresh=$this->getPayout((int)$row['id']);
-            $this->pdo->prepare("UPDATE tournament_prizes SET status=:status,payout_id=:p,updated_at=NOW() WHERE tournament_id=:t AND user_id=:u AND placement=1")->execute([':status'=>$status==='paid'?'paid':($status==='reversed'?'reversed':($status==='failed'?'failed':'processing')),':p'=>$row['id'],':t'=>$row['tournament_id'],':u'=>$row['user_id']]);
-            if ($status==='paid') $this->finalizePaid($fresh,$admin);
-            else $this->notifications->create((int)$row['user_id'],'Prize payout initiated','Your prize payout is being processed by ClickPesa.','payout_pending','payments.html',(int)$admin['id']);
-            $this->audit->record((int)$admin['id'],'payout_initiated','tournament',$tournamentId,['payout_id'=>$row['id'],'reference'=>$row['payout_reference'],'amount'=>$row['amount'],'provider_status'=>$provider['status']??null]);
+            $this->pdo->prepare("UPDATE tournament_prizes SET status=:status,payout_id=:p,updated_at=NOW() WHERE tournament_id=:t AND user_id=:u AND placement=1")->execute([':status'=>'processing',':p'=>$row['id'],':t'=>$row['tournament_id'],':u'=>$row['user_id']]);
+            $this->notifications->create((int)$row['user_id'],'Prize payout initiated','Your prize payout is being processed by administration.','payout_pending','payments.html',(int)$admin['id']);
+            $this->audit->record((int)$admin['id'],'payout_initiated','tournament',$tournamentId,['payout_id'=>$row['id'],'reference'=>$row['payout_reference'],'amount'=>$row['amount'],'provider_status'=>'PROCESSING']);
             return $this->result($fresh,false);
         } catch (\Throwable $e) {
-            $this->pdo->prepare("UPDATE payouts SET status='failed', failed_at=NOW(), last_error=:error WHERE id=:id AND status='processing'")
+            // RELIABILITY CORRECTION: Do not automatically mark the financial transaction as FAILED on network failure
+            // The provider may have processed it, so we leave it as 'processing' and let reconciliation handle it.
+            $this->pdo->prepare("UPDATE payouts SET last_error=:error WHERE id=:id AND status='processing'")
                 ->execute([':error'=>mb_substr($e->getMessage(),0,500), ':id'=>$row['id']]);
-            $this->pdo->prepare("UPDATE tournament_prizes SET status='failed' WHERE tournament_id=:t AND user_id=:u AND placement=1")->execute([':t'=>$row['tournament_id'],':u'=>$row['user_id']]);
-            $this->notifications->create((int)$row['user_id'],'Prize payout failed','The prize payout could not be submitted. An administrator can retry it.','system','payments.html',(int)$admin['id']);
-            throw $e;
+            
+            \App\Core\Logger::warning('PayoutService', 'Payout transfer threw exception but remains processing for reconciliation', [
+                'payout_id' => $row['id'],
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            echo "PDOException: " . $e->getMessage() . "\n";
+            throw new HttpException('The provider network request failed, but the payout is still processing. Please wait for reconciliation.', 502);
         }
     }
 

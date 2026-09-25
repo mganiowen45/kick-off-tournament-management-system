@@ -142,7 +142,7 @@ final class ResultService
         $decision = trim((string) ($data['decision'] ?? $data['outcome'] ?? ''));
         $adminNote = trim((string) ($data['admin_note'] ?? ''));
         if ($disputeId < 1) throw new HttpException('Dispute ID is required.', 422);
-        if (!in_array($decision, ['player1_wins', 'player2_wins', 'draw', 'replay'], true)) {
+        if (!in_array($decision, ['player1_wins', 'player2_wins', 'draw', 'replay', 'no_show_p1', 'no_show_p2'], true)) {
             throw new HttpException('Invalid dispute decision.', 422);
         }
         if (strlen($adminNote) > 2000) throw new HttpException('Admin note is too long.', 422);
@@ -179,7 +179,15 @@ final class ResultService
                      WHERE id = :id"
                 )->execute([':id' => $dispute['match_id']]);
             } else {
-                [$player1Score, $player2Score, $winnerId, $isDraw] = $this->decisionScore($decision, $dispute, $submissions, $data);
+                if (in_array($decision, ['no_show_p1', 'no_show_p2'], true)) {
+                    $isDraw = 0;
+                    $player1Score = 0;
+                    $player2Score = 0;
+                    $winnerId = $decision === 'no_show_p2' ? (int) $dispute['player1_id'] : (int) $dispute['player2_id'];
+                } else {
+                    [$player1Score, $player2Score, $winnerId, $isDraw] = $this->decisionScore($decision, $dispute, $submissions, $data);
+                }
+                
                 $this->pdo->prepare(
                     "UPDATE matches SET status = 'confirmed', player1_score = :p1, player2_score = :p2,
                         winner_id = :winner, is_draw = :draw, played_at = COALESCE(played_at, NOW()), confirmed_at = NOW()
@@ -191,6 +199,7 @@ final class ResultService
                 $this->pdo->prepare(
                     "UPDATE match_results SET verification_status = 'confirmed' WHERE match_id = :id"
                 )->execute([':id' => $dispute['match_id']]);
+                
                 $match = array_merge($dispute, [
                     'id' => (int) $dispute['match_id'],
                     'player1_score' => $player1Score,
@@ -200,6 +209,25 @@ final class ResultService
                 ]);
                 $this->applyStatistics($match);
                 $this->engine->progressAfterConfirmedMatch((int) $dispute['match_id']);
+                
+                // Assign a strike to the no-show player
+                if ($decision === 'no_show_p1' || $decision === 'no_show_p2') {
+                    $noShowUser = $decision === 'no_show_p1' ? (int) $dispute['player1_id'] : (int) $dispute['player2_id'];
+                    $this->pdo->prepare(
+                        "INSERT INTO player_inactivity_strikes (user_id, match_id, tournament_id, reason, created_at)
+                         VALUES (:user, :match, :tournament, 'Administrative decision: Match No-Show', NOW())"
+                    )->execute([
+                        ':user' => $noShowUser,
+                        ':match' => (int) $dispute['match_id'],
+                        ':tournament' => (int) $dispute['tournament_id'],
+                    ]);
+                    
+                    $strikeCount = $this->pdo->prepare("SELECT COUNT(*) FROM player_inactivity_strikes WHERE user_id = :user");
+                    $strikeCount->execute([':user' => $noShowUser]);
+                    if ((int) $strikeCount->fetchColumn() >= 3) {
+                        $this->pdo->prepare("UPDATE users SET status = 'banned' WHERE id = :id")->execute([':id' => $noShowUser]);
+                    }
+                }
             }
 
             $this->pdo->prepare(

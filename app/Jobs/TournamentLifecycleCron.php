@@ -8,34 +8,57 @@ use App\Services\TournamentService;
 
 $pdo = Database::connection();
 $service = new TournamentService($pdo);
-$stmt = $pdo->query(
-    "SELECT id FROM tournaments
-     WHERE status = 'open'
-       AND auto_start_at IS NOT NULL
-       AND auto_start_at <= NOW()
-       AND current_players >= max_players
-     ORDER BY auto_start_at ASC
-     LIMIT 20"
-);
 
-$started = 0;
-foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $tournamentId) {
-    $pending = $pdo->prepare(
-        "SELECT COUNT(*) FROM tournament_players
-         WHERE tournament_id = :id AND status != 'withdrawn' AND payment_status IN ('pending','failed')"
+(new \App\Core\JobRunner($pdo))->run('TournamentLifecycleCron', function($context) use ($pdo, $service) {
+    $noShowStmt = $pdo->query(
+        "SELECT id FROM tournaments
+         WHERE status = 'open'
+           AND check_in_closes_at IS NOT NULL
+           AND check_in_closes_at <= NOW()
+         ORDER BY check_in_closes_at ASC"
     );
-    $pending->execute([':id' => $tournamentId]);
-    if ((int) $pending->fetchColumn() > 0) {
-        continue;
-    }
-
-    try {
-        if ($service->autoStartDueTournament((int) $tournamentId)) {
-            $started++;
+    $tournaments = $noShowStmt->fetchAll(PDO::FETCH_COLUMN);
+    $context->recordsProcessed += count($tournaments);
+    
+    foreach ($tournaments as $tournamentId) {
+        try {
+            $service->processNoShows((int) $tournamentId);
+            $context->recordsSucceeded++;
+        } catch (Throwable $exception) {
+            $context->recordsFailed++;
+            \App\Core\Logger::error('TournamentLifecycleCron', 'No-show processing failed for tournament ' . $tournamentId, ['error' => $exception->getMessage()]);
         }
-    } catch (Throwable $exception) {
-        error_log('[KICKOFF lifecycle] Tournament ' . $tournamentId . ': ' . $exception->getMessage());
     }
-}
 
-echo 'Started tournaments: ' . $started . PHP_EOL;
+    $stmt = $pdo->query(
+        "SELECT id FROM tournaments
+         WHERE status = 'open'
+           AND auto_start_at IS NOT NULL
+           AND auto_start_at <= NOW()
+         ORDER BY auto_start_at ASC
+         LIMIT 20"
+    );
+    
+    $startCandidates = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    $context->recordsProcessed += count($startCandidates);
+    
+    foreach ($startCandidates as $tournamentId) {
+        $pending = $pdo->prepare(
+            "SELECT COUNT(*) FROM tournament_players
+             WHERE tournament_id = :id AND status != 'withdrawn' AND payment_status IN ('pending','failed')"
+        );
+        $pending->execute([':id' => $tournamentId]);
+        if ((int) $pending->fetchColumn() > 0) {
+            continue;
+        }
+
+        try {
+            if ($service->autoStartDueTournament((int) $tournamentId)) {
+                $context->recordsSucceeded++;
+            }
+        } catch (Throwable $exception) {
+            $context->recordsFailed++;
+            \App\Core\Logger::error('TournamentLifecycleCron', 'Auto-start failed for tournament ' . $tournamentId, ['error' => $exception->getMessage()]);
+        }
+    }
+});

@@ -1,0 +1,4 @@
+<?php
+require 'config/config.php';
+$pdo = new PDO('mysql:host='.DB_HOST.';dbname=kick_off', DB_USER, DB_PASS);
+print_r(array_filter(array_column($pdo->query('SHOW TABLES')->fetchAll(), 0), fn($t) => str_contains($t, 'payout')));

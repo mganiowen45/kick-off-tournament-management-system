@@ -18,6 +18,7 @@ final class TournamentService
     private TournamentCatalogService $catalog;
     private TournamentFinanceService $finance;
     private PaymentService $payments;
+    private RefundService $refunds;
 
     public function __construct(private readonly PDO $pdo)
     {
@@ -26,6 +27,7 @@ final class TournamentService
         $this->catalog = new TournamentCatalogService($pdo);
         $this->finance = new TournamentFinanceService();
         $this->payments = new PaymentService($pdo);
+        $this->refunds = new RefundService($pdo);
     }
 
     public function create(int $userId, array $data): array
@@ -34,7 +36,7 @@ final class TournamentService
         $token = bin2hex(random_bytes(16));
         $tokenHash = hash('sha256', $token);
 
-        return Database::transaction(function () use ($userId, $values, $token, $tokenHash): array {
+        $result = Database::transaction(function () use ($userId, $values, $token, $tokenHash): array {
             $stmt = $this->pdo->prepare(
                 "INSERT INTO tournaments
                     (creator_id, name, description, game, game_id, platform_id, cover_image_id,
@@ -75,13 +77,17 @@ final class TournamentService
                 ':deadline' => $values['registration_deadline'],
             ]);
             $id = (int) $this->pdo->lastInsertId();
+            $paymentStatus = (float) $values['entry_fee_amount'] > 0 ? 'pending' : 'not_required';
+            $reservationExpiresAt = (float) $values['entry_fee_amount'] > 0 ? date('Y-m-d H:i:s', time() + RESERVATION_EXPIRY_MINUTES * 60) : null;
+            
             $this->pdo->prepare(
-                "INSERT INTO tournament_players (tournament_id, user_id, status, payment_status)
-                 VALUES (:tournament_id, :user_id, 'registered', :payment_status)"
+                "INSERT INTO tournament_players (tournament_id, user_id, status, payment_status, reservation_expires_at)
+                 VALUES (:tournament_id, :user_id, 'registered', :payment_status, :reservation_expires_at)"
             )->execute([
                 ':tournament_id' => $id,
                 ':user_id' => $userId,
-                ':payment_status' => 'not_required',
+                ':payment_status' => $paymentStatus,
+                ':reservation_expires_at' => $reservationExpiresAt,
             ]);
 
             return [
@@ -90,8 +96,29 @@ final class TournamentService
                 'share_url' => "tournament_detail.html?id={$id}&invite={$token}",
                 'redirect' => "tournament_detail.html?id={$id}",
                 'prize_distribution' => $this->finance->prizeDistribution($values['format'], $values['max_players'], (float) $values['prize_pool_amount']),
+                'payment_required' => (float) $values['entry_fee_amount'] > 0,
+                'user_id' => $userId,
             ];
         });
+
+        if ($result['payment_required']) {
+            $userStmt = $this->pdo->prepare('SELECT * FROM users WHERE id = :id');
+            $userStmt->execute([':id' => $result['user_id']]);
+            
+            $tStmt = $this->pdo->prepare('SELECT * FROM tournaments WHERE id = :id');
+            $tStmt->execute([':id' => $result['tournament_id']]);
+            
+            $result['payment'] = $this->payments->createTournamentUssdPush(
+                $userStmt->fetch(PDO::FETCH_ASSOC),
+                $tStmt->fetch(PDO::FETCH_ASSOC),
+                trim((string) ($data['payment_phone'] ?? ''))
+            );
+        } else {
+            $result['payment'] = ['required' => false];
+        }
+        
+        unset($result['user_id'], $result['payment_required']);
+        return $result;
     }
 
     public function list(array $filters, ?array $viewer): array
@@ -275,6 +302,15 @@ final class TournamentService
         $tournament['cover_image_path'] = $tournament['cover_image_url'];
         $tournament['format_label'] = TournamentCatalogService::formatLabel($tournament['format'] ?? '');
         $tournament['funding_label'] = TournamentCatalogService::fundingLabel($tournament['funding_model'] ?? '');
+        
+        $isFull = (int) $tournament['current_players'] >= (int) $tournament['max_players'];
+        $isActive = in_array($tournament['status'], ['active', 'completed'], true);
+        
+        if ($isActive || $isFull) {
+            $actualPrize = $this->finance->settledPrizePool($this->pdo, $tournament);
+            $tournament['prize_pool_amount'] = $actualPrize;
+        }
+
         $tournament['prize_distribution'] = $this->finance->prizeDistribution(
             (string) $tournament['format'],
             (int) $tournament['max_players'],
@@ -435,12 +471,6 @@ final class TournamentService
                 );
             }
 
-            $payment = ['required' => false];
-            if ((float) $tournament['entry_fee_amount'] > 0) {
-                $userStmt = $this->pdo->prepare('SELECT * FROM users WHERE id = :id');
-                $userStmt->execute([':id' => $userId]);
-                $payment = $this->payments->createTournamentCheckout($userStmt->fetch(PDO::FETCH_ASSOC), $tournament);
-            }
             if ((float) $tournament['entry_fee_amount'] <= 0 && $newCount >= (int) $tournament['max_players']) {
                 $this->scheduleCheckIn($tournamentId);
                 $scheduled = $this->loadTournamentSchedule($tournamentId);
@@ -453,15 +483,31 @@ final class TournamentService
                     $userId
                 );
             }
+
             return [
                 'tournament_id' => $tournamentId,
                 'current_players' => $newCount,
                 'started' => false,
                 'check_in_scheduled' => $newCount >= (int) $tournament['max_players'],
-                'payment' => $payment,
+                'payment_required' => (float) $tournament['entry_fee_amount'] > 0,
+                'user_id' => $userId,
+                'tournament' => $tournament,
                 'redirect' => "tournament_detail.html?id={$tournamentId}",
             ];
         });
+
+        $result['payment'] = ['required' => false];
+        if ($result['payment_required']) {
+            $userStmt = $this->pdo->prepare('SELECT * FROM users WHERE id = :id');
+            $userStmt->execute([':id' => $result['user_id']]);
+            $result['payment'] = $this->payments->createTournamentCheckout(
+                $userStmt->fetch(PDO::FETCH_ASSOC),
+                $result['tournament']
+            );
+        }
+        
+        unset($result['user_id'], $result['tournament'], $result['payment_required']);
+        return $result;
     }
 
     public function leave(int $userId, int $tournamentId): void
@@ -610,6 +656,107 @@ final class TournamentService
         return $started;
     }
 
+    public function processNoShows(int $tournamentId): void
+    {
+        Database::transaction(function () use ($tournamentId): void {
+            $stmt = $this->pdo->prepare('SELECT * FROM tournaments WHERE id = :id FOR UPDATE');
+            $stmt->execute([':id' => $tournamentId]);
+            $tournament = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$tournament || $tournament['status'] !== 'open') return;
+
+            $closes = strtotime((string) $tournament['check_in_closes_at']);
+            if (!$closes || time() < $closes) return;
+
+            $playersStmt = $this->pdo->prepare(
+                "SELECT id, user_id FROM tournament_players
+                 WHERE tournament_id = :id AND status != 'withdrawn'
+                   AND payment_status IN ('not_required','paid')
+                   AND checked_in_at IS NULL FOR UPDATE"
+            );
+            $playersStmt->execute([':id' => $tournamentId]);
+            $noShows = $playersStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            if (empty($noShows)) {
+                return;
+            }
+
+            // Mark as withdrawn so they lose their fee (no refund) and are excluded from fixtures.
+            $update = $this->pdo->prepare("UPDATE tournament_players SET status = 'withdrawn' WHERE id = :id");
+            $strike = $this->pdo->prepare(
+                "INSERT INTO player_inactivity_strikes (user_id, tournament_id, reason, created_at)
+                 VALUES (:user, :tournament, 'Failed to check-in before the deadline', NOW())"
+            );
+
+            $strikeCount = $this->pdo->prepare("SELECT COUNT(*) FROM player_inactivity_strikes WHERE user_id = :user");
+            $suspend = $this->pdo->prepare("UPDATE users SET status = 'banned' WHERE id = :user");
+
+            foreach ($noShows as $player) {
+                $update->execute([':id' => $player['id']]);
+                $strike->execute([':user' => $player['user_id'], ':tournament' => $tournamentId]);
+                
+                $strikeCount->execute([':user' => $player['user_id']]);
+                if ((int) $strikeCount->fetchColumn() >= 3) {
+                    $suspend->execute([':user' => $player['user_id']]);
+                }
+            }
+            
+            // Adjust current_players
+            $this->pdo->prepare(
+                "UPDATE tournaments SET current_players = GREATEST(0, current_players - :removed) WHERE id = :id"
+            )->execute([':removed' => count($noShows), ':id' => $tournamentId]);
+        });
+    }
+
+    public function checkIn(array $user, int $tournamentId): void
+    {
+        Database::transaction(function () use ($user, $tournamentId): void {
+            $stmt = $this->pdo->prepare('SELECT * FROM tournaments WHERE id = :id FOR UPDATE');
+            $stmt->execute([':id' => $tournamentId]);
+            $tournament = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$tournament) {
+                throw new HttpException('Tournament not found.', 404);
+            }
+            if ($tournament['status'] !== 'open') {
+                throw new HttpException('Tournament is not open for check-in.', 409);
+            }
+
+            $time = time();
+            $opens = strtotime((string) $tournament['check_in_opens_at']);
+            $closes = strtotime((string) $tournament['check_in_closes_at']);
+
+            if (!$opens || !$closes) {
+                throw new HttpException('Check-in has not been scheduled yet.', 409);
+            }
+            if ($time < $opens) {
+                throw new HttpException('Check-in has not opened yet.', 409);
+            }
+            if ($time > $closes) {
+                throw new HttpException('Check-in is closed.', 409);
+            }
+
+            $memberStmt = $this->pdo->prepare(
+                'SELECT * FROM tournament_players WHERE tournament_id = :tid AND user_id = :uid FOR UPDATE'
+            );
+            $memberStmt->execute([':tid' => $tournamentId, ':uid' => $user['id']]);
+            $member = $memberStmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$member || $member['status'] === 'withdrawn') {
+                throw new HttpException('You are not an active participant in this tournament.', 403);
+            }
+            if (!in_array($member['payment_status'], ['not_required', 'paid'], true)) {
+                throw new HttpException('You must complete payment before checking in.', 403);
+            }
+            if ($member['checked_in_at'] !== null) {
+                return; // Already checked in
+            }
+
+            $this->pdo->prepare('UPDATE tournament_players SET checked_in_at = NOW() WHERE id = :id')
+                ->execute([':id' => $member['id']]);
+        });
+    }
+
     public function cancel(array $actor, int $tournamentId): void
     {
         $stmt = $this->pdo->prepare('SELECT * FROM tournaments WHERE id = :id');
@@ -620,6 +767,9 @@ final class TournamentService
         if ($tournament['status'] === 'completed') throw new HttpException('A completed tournament cannot be cancelled.', 409);
         $this->pdo->prepare("UPDATE tournaments SET status = 'cancelled' WHERE id = :id")
             ->execute([':id' => $tournamentId]);
+            
+        $this->refunds->refundCancelledTournament($tournamentId, (int) $actor['id']);
+        
         $this->notifications->tournamentMembers(
             $tournamentId,
             'Tournament cancelled',

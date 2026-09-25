@@ -96,6 +96,7 @@ async function load() {
           ${pendingPayment ? `<button class="btn-ghost" id="payment-btn" onclick="continuePayment(this,'${jsString(t.pending_checkout_url)}')">Continue Payment</button>` : ""}
           ${canJoin ? `<button class="btn-ghost" id="join-btn" onclick="joinTournament(this,${Number(t.id)})">Join Tournament</button>` : ""}
           ${!currentUser && canJoinAfterAuth ? `<button class="btn-ghost" id="join-btn" onclick="joinTournament(this,${Number(t.id)})">Log In to Join</button>` : ""}
+          ${renderCheckInButton(t, players, currentUser)}
           ${permissions.can_request_cancellation ? `<button class="btn-ghost" onclick="requestCancellation(${Number(t.id)})">Request Cancellation</button>` : ""}
         </div>
       </div>
@@ -204,17 +205,26 @@ function renderMatches(title, rows) {
 }
 
 function renderSeries(rows, players) {
+  // A 1v1 tournament has at most two joined players. Matches (and their
+  // player1_id/player2_id) only exist once the series has actually been
+  // generated, so relying on rows[0] left the header showing the literal
+  // "Player A" / "Player B" placeholders for the whole "full, waiting to
+  // start" window. Prefer the real joined players list - which is always
+  // available regardless of match/login state - and only fall back to the
+  // match row (then the placeholder) if a player genuinely hasn't joined yet.
   const first = rows[0] || {};
-  const p1 = players.find(p => Number(p.user_id) === Number(first.player1_id)) || {};
-  const p2 = players.find(p => Number(p.user_id) === Number(first.player2_id)) || {};
-  const p1Wins = rows.filter(m => Number(m.winner_id) === Number(first.player1_id)).length;
-  const p2Wins = rows.filter(m => Number(m.winner_id) === Number(first.player2_id)).length;
+  const p1id = first.player1_id ?? players[0]?.user_id;
+  const p2id = first.player2_id ?? players[1]?.user_id;
+  const p1 = players.find(p => Number(p.user_id) === Number(p1id)) || {};
+  const p2 = players.find(p => Number(p.user_id) === Number(p2id)) || {};
+  const p1Wins = rows.filter(m => Number(m.winner_id) === Number(p1id)).length;
+  const p2Wins = rows.filter(m => Number(m.winner_id) === Number(p2id)).length;
   return `<div class="section-panel" style="margin-top:1rem;">
     <div class="panel-header"><h2 class="panel-title">Best Of 3 Series</h2><span class="badge badge-open">${p1Wins} - ${p2Wins}</span></div>
     <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:1rem;align-items:center;margin-bottom:1rem;">
-      <div class="player-item"><div class="p-av">${p1.avatar_url ? `<img src="${esc(p1.avatar_url)}" alt="">` : ""}</div><div><div class="p-name">${esc(p1.username || first.player1_name || "Player A")}</div><div class="p-sub">${p1Wins} wins</div></div></div>
+      <div class="player-item"><div class="p-av">${p1.avatar_url ? `<img src="${esc(p1.avatar_url)}" alt="">` : ""}</div><div><div class="p-name">${esc(p1.username || first.player1_name || "Waiting for player")}</div><div class="p-sub">${p1Wins} wins</div></div></div>
       <div class="font-display text-lime">${p1Wins} : ${p2Wins}</div>
-      <div class="player-item"><div class="p-av">${p2.avatar_url ? `<img src="${esc(p2.avatar_url)}" alt="">` : ""}</div><div><div class="p-name">${esc(p2.username || first.player2_name || "Player B")}</div><div class="p-sub">${p2Wins} wins</div></div></div>
+      <div class="player-item"><div class="p-av">${p2.avatar_url ? `<img src="${esc(p2.avatar_url)}" alt="">` : ""}</div><div><div class="p-name">${esc(p2.username || first.player2_name || "Waiting for player")}</div><div class="p-sub">${p2Wins} wins</div></div></div>
     </div>
     ${[1,2,3].map(game => {
       const match = rows.find(m => Number(m.series_game_number) === game);
@@ -232,7 +242,7 @@ function renderSeries(rows, players) {
 
 function renderPlayer(p) {
   return `<div class="player-item" onclick="location.href='profile.html?id=${Number(p.user_id)}'" style="cursor:pointer;">
-    <div class="p-av"><img src="${esc(p.avatar_url)}" alt=""></div>
+    <div class="p-av" style="width:36px;height:36px;border-radius:50%;overflow:hidden;flex-shrink:0;">${p.avatar_url ? `<img src="${esc(p.avatar_url)}" style="width:100%;height:100%;object-fit:cover;" alt="">` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:var(--surface);color:var(--text);font-size:12px;font-weight:bold;">${esc(p.username.substring(0,2).toUpperCase())}</div>`}</div>
     <div><div class="p-name">${esc(p.username)}</div><div class="p-sub">${esc(p.country || "")} - ${esc(p.status)}</div></div>
   </div>`;
 }
@@ -361,6 +371,37 @@ async function reportNoShow(matchId) {
   const data = await res.json();
   KickoffUI.toast(data.success ? "No-show report submitted for admin review." : (data.error || "Could not submit report."), data.success ? "success" : "error");
   if (data.success) load();
+}
+
+function renderCheckInButton(t, players, currentUser) {
+  if (!currentUser) return "";
+  const player = players.find(p => Number(p.user_id) === Number(currentUser.id));
+  if (!player) return "";
+  if (player.status === "withdrawn") return "";
+  if (player.status === "checked_in") return `<button class="btn-ghost" disabled>Checked In</button>`;
+
+  const now = Date.now();
+  const checkInOpens = t.check_in_opens_at ? new Date(t.check_in_opens_at).getTime() : 0;
+  const checkInCloses = t.check_in_closes_at ? new Date(t.check_in_closes_at).getTime() : 0;
+  
+  if (checkInOpens && checkInCloses && now >= checkInOpens && now <= checkInCloses) {
+    return `<button class="btn-lime" onclick="checkInTournament(this, ${Number(t.id)})">Check In Now</button>`;
+  }
+  return "";
+}
+
+async function checkInTournament(btn, id) {
+  await KickoffUI.withButtonLoading(btn, "Checking in...", async () => {
+    const res = await fetch("api/tournaments/check-in.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ tournament_id: id })
+    });
+    const data = await res.json();
+    KickoffUI.toast(data.success ? "You are checked in!" : (data.error || "Could not check in."), data.success ? "success" : "error");
+    if (data.success) load();
+  });
 }
 
 load();

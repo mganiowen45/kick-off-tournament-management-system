@@ -24,13 +24,35 @@ final class AdminController
         $this->pdo = Database::connection();
     }
 
+    public function matches(Request $request): never
+    {
+        $request->requireMethod('GET');
+        Auth::requireAdmin();
+
+        $stmt = $this->pdo->query("
+            SELECT m.id, m.tournament_id, m.stage, m.round_number, m.status,
+                   m.player1_score, m.player2_score, m.scheduled_at,
+                   t.name AS tournament_name,
+                   p1.username AS player1_username,
+                   p2.username AS player2_username
+            FROM matches m
+            JOIN tournaments t ON t.id = m.tournament_id
+            JOIN users p1 ON p1.id = m.player1_id
+            JOIN users p2 ON p2.id = m.player2_id
+            ORDER BY m.created_at DESC, m.id DESC
+            LIMIT 100
+        ");
+
+        Response::success(['matches' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+    }
+
     public function stats(Request $request): never
     {
         $request->requireMethod('GET');
         Auth::requireAdmin();
         $row = $this->pdo->query(
             "SELECT
-              (SELECT COUNT(*) FROM users WHERE role = 'player') AS totalUsers,
+              (SELECT COUNT(*) FROM users) AS totalUsers,
               (SELECT COUNT(*) FROM tournaments WHERE status IN ('open', 'active')) AS activeTourn,
               (SELECT COUNT(*) FROM disputes WHERE status IN ('open', 'under_review')) AS openDisputes,
               (SELECT COUNT(*) FROM matches WHERE DATE(played_at) = CURDATE()) AS matchesToday,
@@ -54,7 +76,7 @@ final class AdminController
                 UNION ALL
                 SELECT 'dispute_raised', CONCAT('Dispute raised: DISP-', id), created_at FROM disputes
                 UNION ALL
-                SELECT 'new_user', CONCAT('New user registered: ', username), created_at FROM users WHERE role = 'player'
+                SELECT 'new_user', CONCAT('New user registered: ', username), created_at FROM users
              ) activity WHERE time IS NOT NULL ORDER BY time DESC LIMIT 15"
         )->fetchAll(PDO::FETCH_ASSOC);
         Response::success(array_merge($row, ['weekly' => $weekly, 'activity' => $activity]));
@@ -65,7 +87,7 @@ final class AdminController
         $request->requireMethod('GET');
         Auth::requireAdmin();
         ['page' => $page, 'limit' => $limit, 'offset' => $offset] = $request->pagination();
-        $where = ["role = 'player'"];
+        $where = ["1=1"];
         $params = [];
         $status = trim((string) $request->query('status', ''));
         if ($status !== '') {
@@ -78,6 +100,10 @@ final class AdminController
             $term = '%' . addcslashes(mb_substr($search, 0, 80), '%_\\') . '%';
             $where[] = '(username LIKE :s1 OR email LIKE :s2 OR country LIKE :s3)';
             $params += [':s1' => $term, ':s2' => $term, ':s3' => $term];
+        }
+        $newToday = (bool) $request->input('new_today');
+        if ($newToday) {
+            $where[] = 'DATE(created_at) = CURDATE()';
         }
         $whereSql = implode(' AND ', $where);
         $count = $this->pdo->prepare("SELECT COUNT(*) FROM users WHERE {$whereSql}");
@@ -103,12 +129,61 @@ final class AdminController
         $admin = Auth::requireAdmin();
         $userId = $request->integer('user_id');
         $action = trim((string) $request->input('action', ''));
-        if (!in_array($action, ['ban', 'unban', 'warn'], true)) throw new HttpException('Invalid moderation action.', 422);
+        if (!in_array($action, ['ban', 'unban', 'warn', 'add_strike', 'remove_strike'], true)) throw new HttpException('Invalid moderation action.', 422);
+        
         $stmt = $this->pdo->prepare('SELECT id, username, role FROM users WHERE id = :id');
         $stmt->execute([':id' => $userId]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$user) throw new HttpException('User not found.', 404);
         if ($user['role'] === 'admin') throw new HttpException('Administrator accounts cannot be moderated here.', 403);
+        
+        if ($action === 'add_strike' || $action === 'remove_strike') {
+            if ($action === 'add_strike') {
+                $this->pdo->prepare(
+                    "INSERT INTO player_inactivity_strikes (user_id, reason, created_at)
+                     VALUES (:user, 'Administrative manual strike', NOW())"
+                )->execute([':user' => $userId]);
+                $msg = 'An administrator has added an inactivity strike to your account.';
+                $resp = 'Strike added successfully.';
+            } else {
+                $this->pdo->prepare(
+                    "DELETE FROM player_inactivity_strikes WHERE user_id = :user ORDER BY created_at DESC LIMIT 1"
+                )->execute([':user' => $userId]);
+                $msg = 'An administrator has removed an inactivity strike from your account.';
+                $resp = 'Strike removed successfully.';
+            }
+            
+            $this->pdo->prepare(
+                "INSERT INTO audit_logs (user_id, actor_id, action, resource, metadata, created_at)
+                 VALUES (:u, :a, :act, 'player_inactivity_strikes', :meta, NOW())"
+            )->execute([
+                ':u' => $userId,
+                ':a' => $admin['id'],
+                ':act' => $action,
+                ':meta' => json_encode(['reason' => 'Admin manual override'])
+            ]);
+            
+            (new NotificationService($this->pdo))->create(
+                $userId, 'Account strike update', $msg, 'account_warning', 'profile.html', (int) $admin['id']
+            );
+            
+            // Check for suspension
+            if ($action === 'add_strike') {
+                $strikeCount = $this->pdo->prepare("SELECT COUNT(*) FROM player_inactivity_strikes WHERE user_id = :user");
+                $strikeCount->execute([':user' => $userId]);
+                if ((int) $strikeCount->fetchColumn() >= 3) {
+                    $this->pdo->prepare(
+                        "UPDATE users SET status = 'banned', remember_token = NULL, remember_expires = NULL WHERE id = :id"
+                    )->execute([':id' => $userId]);
+                    (new NotificationService($this->pdo))->create(
+                        $userId, 'Account suspended', 'Your account was suspended due to accumulating 3 inactivity strikes.', 'account_warning', 'profile.html', (int) $admin['id']
+                    );
+                }
+            }
+            
+            Response::success([], $resp);
+        }
+        
         $newStatus = ['ban' => 'banned', 'unban' => 'active', 'warn' => 'warned'][$action];
         $this->pdo->prepare(
             'UPDATE users SET status = :status, remember_token = IF(:is_ban = 1, NULL, remember_token),

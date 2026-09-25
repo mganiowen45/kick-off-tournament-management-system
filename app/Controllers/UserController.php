@@ -34,17 +34,15 @@ final class UserController
 
         $counts = $this->pdo->prepare(
             "SELECT
-                (SELECT COUNT(*) FROM notifications WHERE user_id = :id1 AND is_read = 0) AS notifications,
-                (SELECT COUNT(*) FROM messages WHERE receiver_id = :id2 AND is_read = 0 AND type = 'direct') AS messages"
+                (SELECT COUNT(*) FROM notifications WHERE user_id = :id AND is_read = 0) AS notifications"
         );
-        $counts->execute([':id1' => $user['id'], ':id2' => $user['id']]);
-        $unread = $counts->fetch(PDO::FETCH_ASSOC) ?: ['notifications' => 0, 'messages' => 0];
+        $counts->execute([':id' => $user['id']]);
+        $unread = $counts->fetch(PDO::FETCH_ASSOC) ?: ['notifications' => 0];
 
         Response::success([
             'logged_in' => true,
             'user' => AvatarCatalog::decorate($user),
             'unread_notifications' => (int) $unread['notifications'],
-            'unread_messages' => (int) $unread['messages'],
             'csrf_token' => Csrf::token(),
         ]);
     }
@@ -132,11 +130,20 @@ final class UserController
         }, $history->fetchAll(PDO::FETCH_ASSOC));
 
         $tournamentsStmt = $this->pdo->prepare(
-            'SELECT t.id, t.name, t.format, t.status, tp.status AS player_status, tp.league_points, tp.wins
+            'SELECT t.id, t.name, t.format, t.status, t.creator_id, t.winner_id,
+                    t.max_players, t.current_players, t.start_date, t.completed_at,
+                    tp.status AS player_status, tp.league_points, tp.wins, tp.losses, tp.is_eliminated
              FROM tournament_players tp JOIN tournaments t ON t.id = tp.tournament_id
              WHERE tp.user_id = :id ORDER BY t.created_at DESC LIMIT 20'
         );
         $tournamentsStmt->execute([':id' => $id]);
+        $tournaments = array_map(function (array $row) use ($id): array {
+            $row['is_creator'] = (int) $row['creator_id'] === $id;
+            $row['format_label'] = TournamentCatalogService::formatLabel($row['format'] ?? '');
+            $row['result_status'] = $this->tournamentResultStatus($row, $id);
+            unset($row['creator_id']);
+            return $row;
+        }, $tournamentsStmt->fetchAll(PDO::FETCH_ASSOC));
 
         $achievementStmt = $this->pdo->prepare(
             'SELECT a.code, a.name, a.description, a.icon, ua.earned_at
@@ -149,7 +156,7 @@ final class UserController
             'user' => $user,
             'gameProfiles' => $profilesStmt->fetchAll(PDO::FETCH_ASSOC),
             'matchHistory' => $matchHistory,
-            'tournaments' => $tournamentsStmt->fetchAll(PDO::FETCH_ASSOC),
+            'tournaments' => $tournaments,
             'achievements' => $achievementStmt->fetchAll(PDO::FETCH_ASSOC),
             'is_own_profile' => $viewer && (int) $viewer['id'] === $id,
         ]);
@@ -410,6 +417,32 @@ final class UserController
     private function winRate(int $wins, int $total): float
     {
         return $total > 0 ? round($wins / $total * 100, 1) : 0.0;
+    }
+
+    /**
+     * Turns a tournament + this player's participation in it into one clear,
+     * unambiguous status the profile page can badge - "won", "lost",
+     * "in_progress", "upcoming", "withdrawn" or "cancelled" - instead of the
+     * raw tournament status, which alone can't say whether the viewer won,
+     * lost, or is still waiting on the thing.
+     */
+    private function tournamentResultStatus(array $row, int $viewerId): string
+    {
+        $status = (string) ($row['status'] ?? '');
+        $playerStatus = (string) ($row['player_status'] ?? '');
+        if ($status === 'cancelled') {
+            return 'cancelled';
+        }
+        if ($playerStatus === 'withdrawn') {
+            return 'withdrawn';
+        }
+        if ($status === 'completed') {
+            return ((int) ($row['winner_id'] ?? 0) === $viewerId) ? 'won' : 'lost';
+        }
+        if ($status === 'active') {
+            return 'in_progress';
+        }
+        return 'upcoming';
     }
 
     private function pagination(int $total, int $page, int $limit): array

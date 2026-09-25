@@ -28,7 +28,13 @@ final class TournamentController
         $request->requireMethod('POST');
         $request->requireCsrf();
         $user = Auth::requireCompletedPlayerProfile();
-        Response::success($this->service->create((int) $user['id'], $request->data()), 'Tournament created.', 201);
+        
+        $result = $this->service->create((int) $user['id'], $request->data());
+        $message = !empty($result['payment']['required'])
+            ? 'Tournament created and payment request sent to your phone.'
+            : 'Tournament created.';
+        Response::success($result, $message, !empty($result['payment']['required']) ? 202 : 201);
+
     }
 
     public function list(Request $request): never
@@ -187,6 +193,18 @@ final class TournamentController
         throw new HttpException('Invalid invite action.', 422);
     }
 
+    public function checkIn(Request $request): never
+    {
+        $request->requireMethod('POST');
+        $request->requireCsrf();
+        $user = Auth::requireCompletedPlayerProfile();
+        $id = $request->integer('tournament_id');
+        if ($id < 1) throw new HttpException('Tournament ID is required.', 422);
+        
+        $this->service->checkIn($user, $id);
+        Response::success([], 'You have successfully checked in.');
+    }
+
     public function standings(Request $request): never
     {
         $request->requireMethod('GET');
@@ -198,48 +216,26 @@ final class TournamentController
         );
         $groupsStmt->execute([':id' => $id]);
         $groups = [];
+        $engine = new \App\Services\TournamentEngine($this->pdo);
+        
         foreach ($groupsStmt->fetchAll(PDO::FETCH_ASSOC) as $group) {
-            $stmt = $this->pdo->prepare(
-                "SELECT ranked.* FROM (
-                    SELECT tp.tournament_id, tp.user_id, u.username, u.country, u.avatar_url,
-                           tp.wins, tp.draws, tp.losses, tp.goals_for, tp.goals_against,
-                           (tp.goals_for - tp.goals_against) AS goal_diff, tp.league_points,
-                           gm.rank_position, gm.qualified_at,
-                           RANK() OVER (ORDER BY tp.league_points DESC,
-                               (tp.goals_for - tp.goals_against) DESC, tp.goals_for DESC, tp.wins DESC, tp.joined_at ASC) AS position
-                    FROM tournament_group_members gm
-                    JOIN tournament_players tp ON tp.tournament_id = gm.tournament_id AND tp.user_id = gm.user_id
-                    JOIN users u ON u.id = tp.user_id
-                    WHERE gm.group_id = :group_id AND tp.status != 'withdrawn'
-                 ) ranked ORDER BY position ASC, user_id ASC"
-            );
-            $stmt->execute([':group_id' => $group['id']]);
+            $standings = $engine->calculateStandings($id, (int) $group['id']);
             $groups[] = [
                 'id' => (int) $group['id'],
                 'name' => $group['name'],
                 'status' => $group['status'],
-                'standings' => array_map(static fn(array $row): array => AvatarCatalog::decorate($row), $stmt->fetchAll(PDO::FETCH_ASSOC)),
+                'standings' => array_map(static fn(array $row): array => \App\Support\AvatarCatalog::decorate($row), $standings),
             ];
         }
 
         if (!$groups) {
-            $stmt = $this->pdo->prepare(
-                "SELECT ranked.* FROM (
-                    SELECT tp.tournament_id, tp.user_id, u.username, u.country, u.avatar_url,
-                           tp.wins, tp.draws, tp.losses, tp.goals_for, tp.goals_against,
-                           (tp.goals_for - tp.goals_against) AS goal_diff, tp.league_points,
-                           RANK() OVER (ORDER BY tp.league_points DESC,
-                               (tp.goals_for - tp.goals_against) DESC, tp.goals_for DESC, tp.wins DESC) AS position
-                    FROM tournament_players tp JOIN users u ON u.id = tp.user_id
-                    WHERE tp.tournament_id = :id AND tp.status != 'withdrawn'
-                 ) ranked ORDER BY position ASC, user_id ASC"
-            );
-            $stmt->execute([':id' => $id]);
+            // Group Knockout tournaments ALWAYS have groups.
+            // But if there are no groups yet, we just return empty standings.
             $groups[] = [
                 'id' => null,
                 'name' => 'Standings',
                 'status' => $data['tournament']['status'] ?? '',
-                'standings' => array_map(static fn(array $row): array => AvatarCatalog::decorate($row), $stmt->fetchAll(PDO::FETCH_ASSOC)),
+                'standings' => [],
             ];
         }
 

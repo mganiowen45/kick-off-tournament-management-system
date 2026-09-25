@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>KICKOFF - Setup MFA</title>
+  <link rel="stylesheet" href="shared.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="assets/js/kickoff-ui.js"></script>
+  <style>
+    .auth-container { max-width: 400px; margin: 50px auto; padding: 20px; background: var(--bg-card); border-radius: 8px; text-align: center; }
+    #qr-code { margin: 20px auto; display: flex; justify-content: center; padding: 10px; background: white; width: fit-content; border-radius: 8px; }
+  </style>
+</head>
+<body class="esport">
+  <div class="auth-container">
+    <h2>Secure Your Admin Account</h2>
+    <p>Please configure Multi-Factor Authentication (MFA) to continue.</p>
+    
+    <div id="qr-code"></div>
+    <p>Secret key: <strong id="secret-text">...</strong></p>
+    
+    <form id="mfaSetupForm">
+      <div class="form-group">
+        <label>Enter 6-digit Code</label>
+        <input type="text" id="code" required pattern="[0-9]{6}" autocomplete="off" autofocus>
+      </div>
+      <div id="mfaError" class="error-message" style="display:none; color: var(--danger);"></div>
+      <button type="submit" class="btn btn-primary" style="width: 100%;">Verify & Enable</button>
+    </form>
+  </div>
+  
+  <script>
+    async function loadSetup() {
+      try {
+        const res = await fetch('api/auth/mfa_setup.php', { credentials: 'same-origin' });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('secret-text').textContent = data.secret;
+          new QRCode(document.getElementById("qr-code"), {
+            text: data.qr_uri,
+            width: 200,
+            height: 200
+          });
+        } else if (data.code === 'MFA_REQUIRED') {
+            window.location.href = data.redirect;
+        } else {
+          document.getElementById('mfaError').textContent = data.error || data.message;
+          document.getElementById('mfaError').style.display = 'block';
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    document.getElementById('mfaSetupForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const code = document.getElementById('code').value;
+      
+      const res = await fetch('api/auth/mfa_setup.php', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ code })
+      });
+      
+      const data = await res.json();
+      if (data.success) {
+        window.location.href = data.redirect || 'admin_dashboard.html';
+      } else {
+        document.getElementById('mfaError').textContent = data.error || data.message;
+        document.getElementById('mfaError').style.display = 'block';
+      }
+    });
+
+    loadSetup();
+  </script>
+</body>
+</html>

@@ -1077,4 +1077,9 @@ footer p {
   background: rgba(30, 40, 58, 0.9);
   border: 1px solid rgba(148, 163, 184, 0.14);
 }
-.payment-only, .wallet-only { display: none !important; }
+.payment-only, .wallet-only { display: none !important; }.modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 9999; align-items: center; justify-content: center; }
+.modal-backdrop.open { display: flex; }
+.modal { background: var(--surface); border-radius: 8px; width: 90%; max-width: 500px; padding: 1.5rem; border: 1px solid var(--border); }
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 10px;}
+.modal-title { font-weight: 600; font-size: 1.2rem; }
+.modal-close { background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--muted); }

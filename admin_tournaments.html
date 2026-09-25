@@ -1,63 +1,57 @@
 <?php require_once __DIR__ . '/includes/page_guard.php'; requireAdminPage(); ?>
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Tournament Control - KICKOFF Admin</title>
 <link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="assets/css/page-overrides.css">
 <script src="assets/js/kickoff-ui.js"></script>
 <script src="assets/js/cover-image.js"></script>
 <script src="includes/nav.js" data-page="admin_tournaments" data-layout="admin"></script>
 </head>
 <body>
+<div class="admin-banner">⚠ Administrator Panel &nbsp;·&nbsp; Tournament Control</div>
 <div id="page-main">
-  <div class="admin-strip">Administrator tournament control - user navigation is intentionally disabled here</div>
   <div class="flex-between gap-md" style="flex-wrap:wrap;margin-bottom:1.25rem;">
     <div>
       <div class="sec-tag">Operations</div>
       <h1 class="sec-title" style="margin-bottom:.35rem;">Tournament <em>Control</em></h1>
-      <p class="page-kicker">Moderate live brackets, registrations, and tournament status from the admin context.</p>
+      <p class="page-kicker" style="color:var(--muted);font-size:.9rem;">Moderate live brackets, registrations, and tournament status from the admin context.</p>
     </div>
     <a href="admin_dashboard.html" class="btn-ghost"><i class="fa-solid fa-arrow-left"></i>Overview</a>
   </div>
 
-  <div class="stats-grid" id="admin-tournament-stats">
-    <div class="stat-card skeleton skeleton-card"></div>
-    <div class="stat-card skeleton skeleton-card"></div>
-    <div class="stat-card skeleton skeleton-card"></div>
-    <div class="stat-card skeleton skeleton-card"></div>
+  <div class="stats-row" id="admin-tournament-stats" style="margin-bottom:1.5rem;">
+    <div class="stat-card"><span class="stat-num">–</span><span class="stat-label">Loaded</span></div>
+    <div class="stat-card"><span class="stat-num">–</span><span class="stat-label">Open</span></div>
+    <div class="stat-card"><span class="stat-num">–</span><span class="stat-label">Live</span></div>
+    <div class="stat-card"><span class="stat-num">–</span><span class="stat-label">Completed</span></div>
   </div>
 
-  <section class="section-panel">
-    <div class="panel-header">
-      <h2 class="panel-title">All Tournaments</h2>
-      <div class="flex gap-sm" style="flex-wrap:wrap;">
-        <button class="filter-btn active" data-status="">All</button>
-        <button class="filter-btn" data-status="open">Open</button>
-        <button class="filter-btn" data-status="active">Live</button>
-        <button class="filter-btn" data-status="completed">Completed</button>
-      </div>
-    </div>
-    <div class="table-wrap">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Host</th>
-            <th>Status</th>
-            <th>Players</th>
-            <th>Prize</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="admin-tournament-rows">
-          <tr><td colspan="7"><div class="skeleton" style="height:42px;"></div></td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div id="pagination" class="flex gap-sm mt-2"></div>
-  </section>
+  <div class="filters-bar" style="margin-bottom:1rem;">
+    <button class="filter-btn active" data-status="">All Tournaments</button>
+    <button class="filter-btn" data-status="open">Open</button>
+    <button class="filter-btn" data-status="active">Live</button>
+    <button class="filter-btn" data-status="completed">Completed</button>
+  </div>
+  
+  <table class="user-table">
+    <thead>
+      <tr>
+        <th>Tournament</th>
+        <th>Host</th>
+        <th>Status</th>
+        <th>Players</th>
+        <th>Prize</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="admin-tournament-rows">
+      <tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--muted);">Loading...</td></tr>
+    </tbody>
+  </table>
+  <div id="pagination" style="display:flex;gap:6px;margin-top:1.2rem;"></div>
 </div>
 
 <script>
@@ -84,26 +78,39 @@
 
   async function loadTournaments() {
     const tbody = document.getElementById("admin-tournament-rows");
-    tbody.innerHTML = `<tr><td colspan="7"><div class="skeleton" style="height:42px;"></div></td></tr>`;
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--muted);">Loading...</td></tr>';
     const params = new URLSearchParams({ page: state.page, limit: 15 });
     if (state.status) params.set("status", state.status);
     const res = await fetch("api/tournaments/list.php?" + params, { credentials: "same-origin" });
     const data = await res.json();
+    if (data.redirect) { window.location.href = data.redirect; return; }
     const items = data.tournaments || [];
     updateStats(items);
     if (!data.success || !items.length) {
-      tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state" style="min-height:90px;">No tournaments found.</div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--muted);">No tournaments found.</td></tr>`;
       return;
     }
     tbody.innerHTML = items.map(t => `<tr>
-      <td><div style="display:flex;gap:10px;align-items:center;">${KickoffCoverImage.render(t, { className: "admin-thumb", seed: t.name })}<div><strong>${esc(t.name)}</strong><div class="text-muted">${esc(t.format)} - Round ${esc(t.current_round || 1)}</div></div></div></td>
+      <td>
+        <div style="display:flex;gap:12px;align-items:center;">
+          <div style="width:50px;height:50px;border-radius:6px;overflow:hidden;flex-shrink:0;">
+            ${KickoffCoverImage.render(t, { style: "width:100%;height:100%;object-fit:cover;", seed: t.name })}
+          </div>
+          <div>
+            <div style="font-weight:600;color:var(--text-bright);">${esc(t.name)}</div>
+            <div style="font-size:0.8rem;color:var(--muted);">${esc(t.format)} - Round ${esc(t.current_round || 1)}</div>
+          </div>
+        </div>
+      </td>
       <td>${esc(t.creator_username || "Unknown")}</td>
       <td>${statusBadge(t.status)}</td>
       <td>${Number(t.current_players || 0)} / ${Number(t.max_players || 0)}</td>
-      <td>${esc(t.prize_pool || "TBA")}</td>
-      <td class="flex gap-sm" style="flex-wrap:wrap;">
-        <a class="btn-ghost" style="min-height:32px;padding:.35rem .65rem;" href="tournament_detail.html?id=${Number(t.id)}">View</a>
-        <button class="btn-danger" style="min-height:32px;padding:.35rem .65rem;" data-delete="${Number(t.id)}">Cancel</button>
+      <td><span style="color:var(--lime);font-weight:600;">${esc(t.prize_pool || "TBA")}</span></td>
+      <td>
+        <div style="display:flex;gap:8px;">
+          <a class="tbl-btn tbl-btn-view" href="tournament_detail.html?id=${Number(t.id)}">View</a>
+          <button class="tbl-btn tbl-btn-warn" data-delete="${Number(t.id)}">Cancel</button>
+        </div>
       </td>
     </tr>`).join("");
     tbody.querySelectorAll("[data-delete]").forEach(btn => btn.addEventListener("click", () => cancelTournament(btn.dataset.delete)));
@@ -114,7 +121,7 @@
     if ((pg.total_pages || 1) > 1) {
       for (let i = 1; i <= pg.total_pages; i++) {
         const btn = document.createElement("button");
-        btn.className = "filter-btn" + (i === pg.page ? " active" : "");
+        btn.className = "pg-btn" + (i === pg.page ? " active" : "");
         btn.textContent = i;
         btn.addEventListener("click", () => { state.page = i; loadTournaments(); });
         pagination.appendChild(btn);
@@ -124,14 +131,16 @@
 
   async function cancelTournament(id) {
     if (!await KickoffUI.confirm({ title: "Cancel Tournament", message: "Cancel this tournament? Players will be notified.", okText: "Cancel Tournament", danger: true })) return;
-    const res = await fetch("api/admin/delete_tournament.php", {
+    const res = await fetch("api/admin/cancel_tournament.php", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
       body: JSON.stringify({ tournament_id: Number(id) })
     });
     const data = await res.json();
+    if (data.redirect) { window.location.href = data.redirect; return; }
     if (!data.success) KickoffUI.toast(data.error || "Unable to cancel tournament.", "error");
+    else KickoffUI.toast("Tournament cancelled.", "success");
     loadTournaments();
   }
 

@@ -1,18 +1,10 @@
 <?php
-require_once __DIR__ . '/../../config/database.php';
-require_once __DIR__ . '/../../includes/functions.php';
+declare(strict_types=1);
 
-requireGet();
-$username = sanitize($_GET['username'] ?? '');
+require_once __DIR__ . '/../../bootstrap.php';
 
-if (!isValidUsername($username)) {
-    jsonSuccess([
-        'available' => false,
-        'invalid' => true,
-        'message' => 'Invalid format'
-    ]);
-}
-$stmt = db()->prepare('SELECT id FROM users WHERE username=:u LIMIT 1');
-$stmt->execute([':u' => $username]);
-$taken = (bool) $stmt->fetch();
-jsonSuccess(['available' => !$taken, 'message' => $taken ? 'Username taken' : 'Username available']);
+use App\Controllers\AuthController;
+use App\Core\Api;
+use App\Core\Request;
+
+Api::run(fn(Request $request) => (new AuthController())->checkUsername($request));

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>KICKOFF - Verify MFA</title>
+  <link rel="stylesheet" href="shared.css">
+  <style>
+    .auth-container { max-width: 400px; margin: 100px auto; padding: 20px; background: var(--bg-card); border-radius: 8px; text-align: center; }
+  </style>
+</head>
+<body class="esport">
+  <div class="auth-container">
+    <h2>Two-Factor Authentication</h2>
+    <p>Please enter the 6-digit code from your authenticator app.</p>
+    
+    <form id="mfaVerifyForm">
+      <div class="form-group">
+        <input type="text" id="code" required pattern="[0-9]{6}" autocomplete="off" autofocus placeholder="000000">
+      </div>
+      <div id="mfaError" class="error-message" style="display:none; color: var(--danger);"></div>
+      <button type="submit" class="btn btn-primary" style="width: 100%;">Verify</button>
+    </form>
+  </div>
+  
+  <script src="assets/js/kickoff-ui.js"></script>
+  <script>
+    document.getElementById('mfaVerifyForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const code = document.getElementById('code').value;
+      
+      const res = await fetch('api/auth/mfa_verify.php', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ code })
+      });
+      
+      const data = await res.json();
+      if (data.success) {
+        window.location.href = data.redirect || 'admin_dashboard.html';
+      } else {
+        document.getElementById('mfaError').textContent = data.error || data.message;
+        document.getElementById('mfaError').style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>

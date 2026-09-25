@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin - Operational Jobs - KICKOFF</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Teko:wght@400;600&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 0.85em; font-weight: bold; }
+    .status-success { background: #28a745; color: #fff; }
+    .status-failed { background: #dc3545; color: #fff; }
+    .status-running { background: #ffc107; color: #000; }
+    .status-pending { background: #17a2b8; color: #fff; }
+  </style>
+</head>
+<body class="bg-dark text-white">
+
+  <!-- Admin Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-secondary mb-4">
+    <div class="container-fluid">
+      <a class="navbar-brand text-primary font-teko fs-3" href="admin_dashboard.html">KICKOFF ADMIN</a>
+      <div class="collapse navbar-collapse">
+        <ul class="navbar-nav me-auto">
+          <li class="nav-item"><a class="nav-link" href="admin_users.html">Users</a></li>
+          <li class="nav-item"><a class="nav-link" href="admin_finance.html">Finance</a></li>
+          <li class="nav-item"><a class="nav-link active" href="admin_jobs.html">System Jobs</a></li>
+        </ul>
+        <div class="d-flex">
+          <button id="logout-btn" class="btn btn-outline-light btn-sm">Logout</button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container pb-5">
+    <h1 class="mb-4 font-teko">Operational Dashboard</h1>
+
+    <div id="alerts-section" style="display:none;" class="mb-4">
+      <h3 class="text-danger border-bottom border-danger pb-2">Critical Alerts</h3>
+      <div id="alerts-list"></div>
+    </div>
+
+    <div class="row">
+      <div class="col-md-8">
+        <h3 class="border-bottom pb-2">Job Runs</h3>
+        <div class="table-responsive">
+          <table class="table table-dark table-striped align-middle">
+            <thead>
+              <tr>
+                <th>Job Name</th>
+                <th>Status</th>
+                <th>Started</th>
+                <th>Finished</th>
+                <th>Processed</th>
+                <th>Errors</th>
+              </tr>
+            </thead>
+            <tbody id="jobs-tbody">
+              <tr><td colspan="6" class="text-center">Loading jobs...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="col-md-4">
+        <h3 class="border-bottom pb-2">Recent Backups</h3>
+        <div class="table-responsive">
+          <table class="table table-dark table-striped align-middle">
+            <thead>
+              <tr>
+                <th>File</th>
+                <th>Status</th>
+                <th>Size</th>
+              </tr>
+            </thead>
+            <tbody id="backups-tbody">
+              <tr><td colspan="3" class="text-center">Loading backups...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="assets/js/api.js"></script>
+  <script src="assets/js/auth.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      if (!Auth.isAdmin()) {
+        window.location.href = 'login.html';
+        return;
+      }
+      
+      document.getElementById('logout-btn').addEventListener('click', () => {
+        Auth.logout();
+      });
+
+      try {
+        const res = await apiCall('/admin/jobs.php', 'GET');
+        if (res.success) {
+          const data = res.data;
+          
+          if (data.alerts && data.alerts.length > 0) {
+            document.getElementById('alerts-section').style.display = 'block';
+            const html = data.alerts.map(a => `
+              <div class="alert alert-danger">
+                <strong>${escapeHtml(a.component)}:</strong> ${escapeHtml(a.message)}
+                <div class="small text-muted">${new Date(a.created_at).toLocaleString()}</div>
+              </div>
+            `).join('');
+            document.getElementById('alerts-list').innerHTML = html;
+          }
+
+          const tbody = document.getElementById('jobs-tbody');
+          if (data.runs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center">No job runs found.</td></tr>';
+          } else {
+            tbody.innerHTML = data.runs.map(r => {
+              const badgeClass = `status-${r.status.toLowerCase()}`;
+              return `
+                <tr>
+                  <td>${escapeHtml(r.job_name)}<br><small class="text-muted">${r.run_id}</small></td>
+                  <td><span class="status-badge ${badgeClass}">${r.status}</span></td>
+                  <td>${new Date(r.started_at).toLocaleString()}</td>
+                  <td>${r.finished_at ? new Date(r.finished_at).toLocaleString() : '-'}</td>
+                  <td>${r.records_processed}</td>
+                  <td>${r.error_summary ? `<span class="text-danger" title="${escapeHtml(r.error_summary)}">Error</span>` : '-'}</td>
+                </tr>
+              `;
+            }).join('');
+          }
+
+          const backupsTbody = document.getElementById('backups-tbody');
+          if (data.backups.length === 0) {
+            backupsTbody.innerHTML = '<tr><td colspan="3" class="text-center">No backups found.</td></tr>';
+          } else {
+            backupsTbody.innerHTML = data.backups.map(b => {
+              const badgeClass = `status-${b.status.toLowerCase()}`;
+              const mb = b.backup_size ? (b.backup_size / 1024 / 1024).toFixed(2) + ' MB' : '-';
+              return `
+                <tr>
+                  <td><small>${escapeHtml(b.filename)}</small><br><small class="text-muted">${new Date(b.started_at).toLocaleString()}</small></td>
+                  <td><span class="status-badge ${badgeClass}">${b.status}</span></td>
+                  <td>${mb}</td>
+                </tr>
+              `;
+            }).join('');
+          }
+
+        } else {
+          alert('Failed to load jobs: ' + res.error);
+        }
+      } catch (err) {
+        alert('Network error loading jobs.');
+      }
+    });
+
+    function escapeHtml(unsafe) {
+      if (!unsafe) return '';
+      return unsafe
+        .toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>

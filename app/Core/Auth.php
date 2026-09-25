@@ -47,7 +47,7 @@ final class Auth
                         profile_setup_completed, theme_preference, timezone,
                         whatsapp_country_code, whatsapp_number, whatsapp_verified_at, whatsapp_contact_opt_in,
                         role, status, points, wins, losses, draws, total_matches, championships,
-                        avatar_url, bio, created_at, last_login
+                        avatar_url, bio, created_at, last_login, mfa_enabled, mfa_secret
                  FROM users WHERE id = :id LIMIT 1'
             );
             $stmt->execute([':id' => $id]);
@@ -56,7 +56,8 @@ final class Auth
             // The championships column is introduced by the migration; retain a clean pre-migration error path.
             $stmt = Database::connection()->prepare(
                 'SELECT id, username, email, first_name, last_name, country, preferred_game, role, status,
-                        points, wins, losses, draws, total_matches, avatar_url, bio, created_at, last_login
+                        points, wins, losses, draws, total_matches, avatar_url, bio, created_at, last_login,
+                        mfa_enabled, mfa_secret
                  FROM users WHERE id = :id LIMIT 1'
             );
             $stmt->execute([':id' => $id]);
@@ -89,12 +90,28 @@ final class Auth
         return $user;
     }
 
-    public static function requireAdmin(): array
+    public static function requireAdmin(bool $skipMfaCheck = false): array
     {
         $user = self::requireUser();
         if ($user['role'] !== 'admin') {
             throw new HttpException('Access denied. Administrator only.', 403);
         }
+
+        if (!$skipMfaCheck) {
+            if (empty($user['mfa_enabled'])) {
+                throw new HttpException('MFA setup required.', 403, [
+                    'code' => 'MFA_SETUP_REQUIRED',
+                    'redirect' => 'admin_mfa_setup.html',
+                ]);
+            }
+            if (empty($_SESSION['mfa_verified'])) {
+                throw new HttpException('MFA verification required.', 403, [
+                    'code' => 'MFA_REQUIRED',
+                    'redirect' => 'admin_mfa_verify.html',
+                ]);
+            }
+        }
+
         return $user;
     }
 
